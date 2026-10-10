@@ -1469,6 +1469,40 @@ void gameplay_absolute_checks(){
     absolute_reset();rejects([&]{gameplay_native_root_fields(absolute_root.data(),absolute_pawn.data(),absolute_root.data(),absolute_proof);},"original root Outer remains independent of OwnerPrivate");
     rejects([]{gameplay_native_image();},"standalone fixture image cannot qualify shipping native code by address alone");
 }
+uint32_t code_queries{},code_flip_query{};uint8_t* code_fixture{};
+SIZE_T WINAPI gameplay_code_query(LPCVOID pointer,PMEMORY_BASIC_INFORMATION out,SIZE_T size){
+    ++code_queries;if(code_flip_query&&code_queries==code_flip_query){DWORD old{};VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READWRITE,&old);code_fixture[4096]^=1;DWORD ignored{};VirtualProtect(code_fixture+4096,4096,old,&ignored);}
+    return VirtualQuery(pointer,out,size);
+}
+void gameplay_code_checks(){
+    uint32_t bytes{};for(const auto& pin:gameplay_code_pins)bytes+=pin.bytes;
+    check(gameplay_code_pins.size()==11&&bytes==11310,"all eleven primary code pins remain in every immutable native plan");
+    code_fixture=static_cast<uint8_t*>(VirtualAlloc(nullptr,12288,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));check(code_fixture!=nullptr,"code fixture owns three independent native memory pages");
+    IMAGE_DOS_HEADER dos{};dos.e_magic=IMAGE_DOS_SIGNATURE;dos.e_lfanew=128;std::memcpy(code_fixture,&dos,sizeof(dos));
+    IMAGE_NT_HEADERS64 pe{};pe.Signature=IMAGE_NT_SIGNATURE;pe.FileHeader.Machine=IMAGE_FILE_MACHINE_AMD64;pe.OptionalHeader.Magic=IMAGE_NT_OPTIONAL_HDR64_MAGIC;pe.OptionalHeader.SizeOfImage=12288;std::memcpy(code_fixture+128,&pe,sizeof(pe));
+    for(size_t i=4096;i<12288;++i)code_fixture[i]=static_cast<uint8_t>((i*17+3)&255);
+    const std::array<GameplayCodePin,2> pins{{{4096,256,gameplay_quat_hash(code_fixture+4096,256)},{8128,128,gameplay_quat_hash(code_fixture+8128,128)}}};
+    DWORD previous{};check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READ,&previous)!=0&&VirtualProtect(code_fixture+8192,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture has a real split executable region");
+    const auto image=reinterpret_cast<uintptr_t>(code_fixture);code_queries=0;
+    const auto profile=gameplay_code_copy(image,pins,gameplay_code_query);check(code_queries==6,"cold copied hashes are followed by a separate fresh full permission/byte comparison");
+    const auto verify=[&](){gameplay_code_validate_at(profile,image,gameplay_code_query);};
+    code_queries=0;verify();check(code_queries==3,"one boundary reuses header/code regions and traverses an executable split window");
+    code_queries=0;verify();check(code_queries==3,"next boundary repeats every region query instead of retaining a validation ticket");
+    code_queries=0;rejects([&]{gameplay_code_validate_at(profile,image+4096,gameplay_code_query);},"replacement module cannot adopt an earlier qualified byte plan");check(code_queries==0,"module identity refuses before replacement memory reads");
+    dos.e_magic=0;std::memcpy(code_fixture,&dos,sizeof(dos));rejects(verify,"changed DOS identity is freshly refused");dos.e_magic=IMAGE_DOS_SIGNATURE;std::memcpy(code_fixture,&dos,sizeof(dos));
+    pe.OptionalHeader.SizeOfImage=12287;std::memcpy(code_fixture+128,&pe,sizeof(pe));rejects(verify,"changed PE image size is freshly refused");pe.OptionalHeader.SizeOfImage=12288;std::memcpy(code_fixture+128,&pe,sizeof(pe));
+    pe.FileHeader.Machine=0;std::memcpy(code_fixture+128,&pe,sizeof(pe));rejects(verify,"changed PE architecture is freshly refused");pe.FileHeader.Machine=IMAGE_FILE_MACHINE_AMD64;std::memcpy(code_fixture+128,&pe,sizeof(pe));
+    check(VirtualProtect(code_fixture+8192,4096,PAGE_READWRITE,&previous)!=0,"fixture removes execution from only the split tail");rejects(verify,"readable nonexecuting split tail cannot satisfy the complete code window");
+    check(VirtualProtect(code_fixture+8192,4096,PAGE_NOACCESS,&previous)!=0,"fixture denies the split tail");rejects(verify,"unreadable split tail refuses before comparing inaccessible bytes");
+    check(VirtualProtect(code_fixture+8192,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture restores split permissions");verify();
+    check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture makes the first copied code page writable");code_fixture[4103]^=1;
+    rejects(verify,"changed live code cannot reuse a copied successful qualification");rejects([&]{gameplay_code_copy(image,pins,gameplay_code_query);},"cold hashes qualify copied expected bytes and reject changed code");
+    code_fixture[4103]^=1;check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READ,&previous)!=0,"fixture restores first code protection");verify();
+    code_queries=0;code_flip_query=4;rejects([&]{gameplay_code_copy(image,pins,gameplay_code_query);},"code change after copied hashes is caught by the fresh comparison before plan exposure");
+    code_flip_query=0;check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture restores final changed code page");code_fixture[4096]^=1;
+    check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READ,&previous)!=0,"fixture restores final permissions");verify();
+    check(VirtualFree(code_fixture,0,MEM_RELEASE)!=0,"code fixture releases only its owned allocation");code_fixture=nullptr;code_queries=0;
+}
 struct GameplayCurrentRecord {uint32_t attempt{},complete{},operations{},stage{},reason{};std::string label;};
 std::vector<GameplayCurrentRecord> gameplay_current_records;bool gameplay_current_log_outside{};
 int gameplay_boundary_outer_reads{};
@@ -1869,6 +1903,7 @@ int main() {
         create_trace_checks(reflect);
         gameplay_readback_checks();
         gameplay_absolute_checks();
+        gameplay_code_checks();
         gameplay_current_checks(reflect);
         gameplay_quat_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");

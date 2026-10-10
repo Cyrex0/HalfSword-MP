@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Compare freshly checked native code against qualified operation-owned bytes,
+  preserving every guard while reducing repeated code-profile work. Show actual
+  pawn, equipment and synchronization stages during gameplay loading.
 - Preserve the exact first failed native gameplay guard cause, waiting only for
   proved receipt expiry, and record bounded apply costs to isolate validation time.
 - Preserve native rotation-cache provenance in gameplay updates and apply exact

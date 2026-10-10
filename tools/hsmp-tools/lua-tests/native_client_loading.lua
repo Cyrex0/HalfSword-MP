@@ -32,6 +32,31 @@ local function fixture(view_ready)
     return f
 end
 do
+    local f=fixture(function()return true end);f.ui:tick()
+    for _,stage in ipairs({"present","character","equipment","controls","check_equipment"})do
+        f.ui:set(stage);f.ui:status("wait_scene",nil,nil,"native gameplay pawn preparing");f.ui:tick()
+        check(f.ui.stage==stage and f:last("SetIsMarquee").args[1]==true and f:count("SetPercent")==0,
+            "exact gameplay preparation pending preserves its honest indeterminate stage: "..stage)
+    end
+    local original={fresh=true,receipt=123,frame_seq=40}
+    f.ui:set("sync");f.ui:tick()
+    check(f.ui.stage=="sync"and not f.ui.ready and f:count("RemoveFromParent")==0,
+        "preparation completion alone cannot remove the synchronization overlay")
+    f.ui:status("live",original,{});f.ui:tick();local mounts=f:count("AddToViewport")
+    f.ui:set("sync");f.ui:tick()
+    check(f.ui.ready and f.ui.host==nil and f:count("AddToViewport")==mounts,
+        "ordinary warm synchronization progress cannot re-cover a proven live view")
+    f.ui:status("wait_scene",original,{},"native gameplay result is stale");f.ui:tick()
+    check(not f.ui.ready and f.ui.host and f.ui.stage=="sync"and f.ui.host.signature:find("Synchronizing the latest match state",1,true)
+        and f:last("SetIsMarquee").args[1]==true and f:count("SetPercent")==0,
+        "an exact original receipt expiry restores a precise sync wait without a completed match bar")
+    local texts=f:count("SetText");f.time=.5;f.ui:tick()
+    check(f:count("SetText")>texts and original.receipt==123 and original.frame_seq==40,
+        "sync waiting remains animated on the real clock without changing original state provenance")
+    f.ui:status("wait_scene",original,{},"unknown native refusal");f.ui:tick()
+    check(f.ui.stage=="waiting","unknown pending causes do not inherit a precise gameplay synchronization claim")
+end
+do
     local f=fixture();f.ui:tick();local text_calls=f:count("SetText")
     f.time=.1;f.ui:tick();f.time=.4;f.ui:tick()
     check(f:count("SetText")==text_calls,"cosmetic waiting updates stay below2Hz between genuine stage changes")

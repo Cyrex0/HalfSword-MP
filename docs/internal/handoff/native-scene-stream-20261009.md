@@ -2,6 +2,46 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual59a2db57 passed full G0 (Lua77/Rust1378/79 binaries), pushed dev and
+RequireG0 deployed all396 hashes. Standard Gameplay132428-2b646f fails readiness:
+both native pawn construction/finish succeed, but neither client reaches LIVE;
+source active inputs0/0. FIRST failed Rust guard predicate now proves original
+ReceiptExpired, handled as `native gameplay result is stale` in wait_scene.
+Original receipt stays250ms; no admission, ACK or timestamp renewal.
+Bounded18 copied cost rows identify full native image qualification as dominant:
+first client apply214407us, image127 calls/190346us; second229202us,
+image122/205380us. Guard/image/pure buckets are nested inclusive; never add them.
+Individual hashing versus memory-query costs remain unmeasured. Exact requested
+world/cache quaternions are copied after update, but final native acceptance has
+not passed. Both original windows were placed on secondary; no model pixels
+observed. Independent cleanup PASS: four originals absent, all20 career saves
+unchanged, no new dumps or unobserved children. Complete phases/states/costs and
+cleanup saved in run native_operator_summary.json. Next optimize the measured
+image qualification with immutable operation-owned qualified byte copies, while
+freshly checking actual module/PE, current memory coverage/permissions, ALL code
+bytes and original root/vtable/link state at every existing guard boundary.
+No cached successful admission, expiry/tolerance change or parity claim.
+
+Code-profile/loading candidate is frozen. NativeWatch owns all11 qualified code
+copies only for its apply operation: copied bytes pass original hash constants,
+then fresh live comparison closes before exposure. Every existing image guard
+freshly verifies actual module/DOS/PE/size, full read+execute memory coverage and
+all11310 pinned bytes. Region observations expire within each callback-free
+check; split regions are traversed and unsupported bounds fail explicitly.
+Original actor/root/vtable/receipt checks remain. Strict production and existing
+CPP fixture2071 assertions PASS. Loading stages now follow actual yielded native
+construction/character/equipment/possession/check work, followed by sync; exact
+stale status restores an opaque synchronization wait. No invented percentage,
+completion count or changed LIVE/owned-view gate. Focused Lua542 assertions PASS.
+Independent native review CLOSED; full G0/deploy/ONE actual run remain required.
+Read-only compact-body gap inventory is saved under ignored native-transform-
+analysis-20261010. Compact sampling returns before full bone/weapon/control
+capture. Client replay explicitly supports Move+Run only. Continuous bones,
+injury, weapon forces/contact and ordered combat-edge replication are absent
+from this compact path; native local simulation alone cannot establish parity.
+Next after readiness: verified native combat event dispatch with lossless ordered
+authority edges, then faithful body/injury reconciliation from primary evidence.
+
 Actual bdf74799 full G0 passed (Lua77 / Rust1378 /79 test binaries), pushed dev,
 RequireG0 deployed all396 files. Standard Gameplay130921-cc011c reaches native
 construction/finish on both clients, then FIRST apply fails before LIVE. Client1

@@ -3,7 +3,7 @@ local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
-    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0,clock=0,timings={}}
+    local f={world="w1",calls={},actions={},progress={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0,clock=0,timings={}}
     local cls={GetAddress=function()return 100 end}
     local function pawn(id)
         local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
@@ -67,7 +67,10 @@ local function fixture()
             f.timings[#f.timings+1]=row;if f.log_error then error("diagnostic sink refused")end
         end,
         world=function()return{GetAddress=function()return 88 end},f.world,{GetAddress=function()return 77 end}end,
-        world_address=function()return 88 end,progress=function()end,fname=function(name)return name end})
+        world_address=function()return 88 end,progress=function(stage,done,total)
+            if done~=nil or total~=nil then f.progress_counts=true end
+            f.progress[#f.progress+1]=stage
+        end,fname=function(name)return name end})
     function f:bootstrap()
         for _=1,12 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
     end
@@ -121,10 +124,14 @@ for _,state in ipairs({1,2})do
 end
 do
     local f=fixture();f:bootstrap()
+    check(table.concat(f.progress,",")=="present,character,present,equipment,controls,check_equipment,present,character,present,equipment,controls,check_equipment",
+        "each yielded native preparation step reports its actual work stage")
     check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,weapons2,gear2,possess2,gear2","native construction/live armor/weapons/gear/possession order including post-possession proof")
     check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
     check(f.scalar_guards>0 and f.wrappers>0,"discarded guards use explicit scalar admission while actual getters retain full wrappers")
     f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
+    check(f.progress[#f.progress]=="sync","finished preparation waits for current authoritative state without claiming readiness")
+    check(not f.progress_counts,"gameplay preparation and synchronization never invent an overall completion count")
     check(ok==true and actual==f.scene and f.confirmed==1 and f.game:view_ready(actual),"complete raw state proof follows whole-roster Lua gear callbacks before readiness")
     check(table.concat(f.calls,","):match("apply,gear1,gear2,confirm$"),"confirmation runs after both final gear checks")
     check(#f.actions==6 and f.actions[1].value==0.25 and f.actions[2].value==-0.5 and f.actions[3].value.KeyName=="None","exact accepted movement and source default FKey Run replay before reconciliation")

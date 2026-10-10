@@ -1,6 +1,9 @@
 // Included inside native_presentation.cpp's private namespace. Real native
 // Willie construction is separate from the inert visual-mirror provider.
 struct GameplayNativeProof {LookupEntry root_path;uintptr_t image{};uint64_t table{};uint8_t body_flags{},notification_flags{};};
+struct GameplayCodeWindow {uint32_t rva{};std::vector<uint8_t> bytes;};
+struct GameplayCodeProfile {uintptr_t image{};uint32_t size{},header{};std::vector<GameplayCodeWindow> windows;};
+const GameplayCodeProfile* gameplay_native_profile();
 void gameplay_native_guard();
 struct GameplayApplied {
     HsmpGameplayState expected{};HsmpGameplayProof proof{};
@@ -371,17 +374,70 @@ using GameplayImport=void(*)(void*,const void* const*);
 using GameplayAbsolute=uint8_t(*)(void*,const double*,const double*,uint8_t,uint8_t);
 using GameplayOverlaps=uint8_t(*)(void*,const GameplayOverlapView*,uint8_t,const GameplayOverlapView*);
 struct GameplayNativeCalls {GameplayImport import{};GameplayAbsolute absolute{};GameplayOverlaps overlaps{};};
-uintptr_t gameplay_native_image(){
-    GameplayApplyTimer image_time(1);
-    uintptr_t image{};uint32_t size{};require(gameplay_quat_image(image,size),"native gameplay absolute image/code unavailable");
-    struct Window{uint32_t rva,bytes;uint64_t hash;};
-    constexpr Window windows[]{{0x3bf5ad0,401,0x9f9ffdef88936f35ULL},{0x3bf1970,2355,0x8a824d5b8f611ae4ULL},
-        {0x3bf7430,2757,0xda3cf6857a774fb7ULL},{0x3bf4370,577,0x1b93861411267304ULL},
-        {0x3bf7f40,125,0x2184e79ded3197a9ULL},{0x3bd6ee0,153,0x239a2ba825e91f19ULL},
-        {0x22179d0,478,0x563d60f52ee4b5deULL},{0x3bda090,4063,0x7954ddbdced44e04ULL}};
-    for(const auto& w:windows)require(w.rva<=size&&w.bytes<=size-w.rva&&gameplay_quat_readable(reinterpret_cast<const void*>(image+w.rva),w.bytes)&&
-        gameplay_quat_hash(reinterpret_cast<const uint8_t*>(image+w.rva),w.bytes)==w.hash,"native gameplay absolute code changed");
-    return image;
+struct GameplayCodePin {uint32_t rva,bytes;uint64_t hash;};
+constexpr std::array<GameplayCodePin,11> gameplay_code_pins{{
+    {0x22177d0,149,0x8d52cc5f8773eb8bULL},{0x3bf1e1a,245,0x662bb9275bcf9788ULL},{0x3bf54ed,7,0x614130ebfc0c0c2aULL},
+    {0x3bf5ad0,401,0x9f9ffdef88936f35ULL},{0x3bf1970,2355,0x8a824d5b8f611ae4ULL},
+    {0x3bf7430,2757,0xda3cf6857a774fb7ULL},{0x3bf4370,577,0x1b93861411267304ULL},
+    {0x3bf7f40,125,0x2184e79ded3197a9ULL},{0x3bd6ee0,153,0x239a2ba825e91f19ULL},
+    {0x22179d0,478,0x563d60f52ee4b5deULL},{0x3bda090,4063,0x7954ddbdced44e04ULL}
+}};
+using GameplayCodeQuery=decltype(&VirtualQuery);
+// Permission observations live only in one callback-free image check.
+// No region or successful validation is retained by the immutable byte plan.
+struct GameplayCodeRegions {
+    struct Region {uintptr_t begin{},end{};bool executable{};};
+    std::array<Region,32> regions{};size_t count{};GameplayCodeQuery query{VirtualQuery};
+    explicit GameplayCodeRegions(GameplayCodeQuery q=VirtualQuery):query(q){}
+    bool covers(const void* pointer,size_t bytes,bool executable){
+        auto at=reinterpret_cast<uintptr_t>(pointer);if(!at||!bytes||bytes>UINTPTR_MAX-at||!query)return false;const auto end=at+bytes;
+        while(at<end){const Region* covered{};for(size_t i=0;i<count;++i)if(regions[i].begin<=at&&at<regions[i].end){covered=&regions[i];break;}
+            if(!covered){MEMORY_BASIC_INFORMATION observed{};
+                if(query(reinterpret_cast<const void*>(at),&observed,sizeof(observed))!=sizeof(observed)||observed.State!=MEM_COMMIT||(observed.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+                const auto protection=observed.Protect&0xff;const bool read=protection==PAGE_READONLY||protection==PAGE_READWRITE||protection==PAGE_WRITECOPY||protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
+                const bool execute=protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
+                const auto begin=reinterpret_cast<uintptr_t>(observed.BaseAddress);
+                if(!read||begin>at||observed.RegionSize>UINTPTR_MAX-begin||begin+observed.RegionSize<=at||count==regions.size())return false;
+                regions[count++]={begin,begin+observed.RegionSize,execute};covered=&regions[count-1];}
+            if(executable&&!covered->executable)return false;at=std::min(end,covered->end);
+        }return true;
+    }
+};
+bool gameplay_code_pe(GameplayCodeRegions& regions,uintptr_t image,uint32_t& size,uint32_t& header){
+    if(!regions.covers(reinterpret_cast<const void*>(image),sizeof(IMAGE_DOS_HEADER),false))return false;
+    IMAGE_DOS_HEADER dos{};std::memcpy(&dos,reinterpret_cast<const void*>(image),sizeof(dos));
+    if(dos.e_magic!=IMAGE_DOS_SIGNATURE||dos.e_lfanew<=0||dos.e_lfanew>=65536||static_cast<uintptr_t>(dos.e_lfanew)>UINTPTR_MAX-image)return false;
+    header=static_cast<uint32_t>(dos.e_lfanew);if(!regions.covers(reinterpret_cast<const void*>(image+header),sizeof(IMAGE_NT_HEADERS64),false))return false;
+    IMAGE_NT_HEADERS64 pe{};std::memcpy(&pe,reinterpret_cast<const void*>(image+header),sizeof(pe));size=pe.OptionalHeader.SizeOfImage;
+    return pe.Signature==IMAGE_NT_SIGNATURE&&pe.FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe.OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&size&&size<=UINTPTR_MAX-image;
+}
+void gameplay_code_validate_at(const GameplayCodeProfile& expected,uintptr_t image,GameplayCodeQuery query=VirtualQuery){
+    require(image&&image==expected.image,"native gameplay original absolute image changed");GameplayCodeRegions regions(query);uint32_t size{},header{};
+    require(gameplay_code_pe(regions,image,size,header)&&size==expected.size&&header==expected.header,"native gameplay original absolute PE changed");
+    for(const auto& window:expected.windows)require(window.rva<=size&&window.bytes.size()<=size-window.rva&&
+        regions.covers(reinterpret_cast<const void*>(image+window.rva),window.bytes.size(),true)&&
+        std::memcmp(reinterpret_cast<const void*>(image+window.rva),window.bytes.data(),window.bytes.size())==0,"native gameplay absolute code changed");
+}
+template<size_t N>GameplayCodeProfile gameplay_code_copy(uintptr_t image,const std::array<GameplayCodePin,N>& pins,GameplayCodeQuery query=VirtualQuery){
+    GameplayCodeProfile profile;profile.image=image;GameplayCodeRegions regions(query);
+    require(gameplay_code_pe(regions,image,profile.size,profile.header),"native gameplay absolute image/code unavailable");
+    profile.windows.reserve(N);
+    for(const auto& pin:pins){require(pin.rva<=profile.size&&pin.bytes<=profile.size-pin.rva&&regions.covers(reinterpret_cast<const void*>(image+pin.rva),pin.bytes,true),"native gameplay absolute code unreadable");
+        GameplayCodeWindow copied;copied.rva=pin.rva;copied.bytes.resize(pin.bytes);std::memcpy(copied.bytes.data(),reinterpret_cast<const void*>(image+pin.rva),pin.bytes);
+        require(gameplay_quat_hash(copied.bytes.data(),copied.bytes.size())==pin.hash,"native gameplay absolute code changed");profile.windows.push_back(std::move(copied));}
+    // Hashes qualify the owned copies, then a distinct fresh boundary compares
+    // every live window before the plan can be exposed to its NativeWatch.
+    gameplay_code_validate_at(profile,image,query);return profile;
+}
+GameplayCodeProfile gameplay_code_bind(){
+    GameplayApplyTimer image_time(1);const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    auto profile=gameplay_code_copy(image,gameplay_code_pins);
+    require(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr))==profile.image,"native gameplay original absolute image changed");return profile;
+}
+uintptr_t gameplay_native_image(const GameplayCodeProfile* supplied=nullptr){
+    const auto* expected=supplied?supplied:gameplay_native_profile();
+    if(!expected)return gameplay_code_bind().image;
+    GameplayApplyTimer image_time(1);const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));gameplay_code_validate_at(*expected,image);return image;
 }
 GameplayCachePair gameplay_cache_pair(const void* root){
     const void* cache{};std::memcpy(&cache,static_cast<const uint8_t*>(root)+0x1c0,8);
@@ -423,9 +479,9 @@ void gameplay_native_root_fields(const void* root,const void* pawn,const void* o
     for(const auto value:cache.q)require(std::isfinite(value),"native gameplay current cache quaternion nonfinite");
     for(const auto value:cache.rotation)require(std::isfinite(value),"native gameplay current cache rotation nonfinite");
 }
-void gameplay_native_pure(const GameplayPawn& entry,const GameplayNativeProof& proof){
+void gameplay_native_pure(const GameplayPawn& entry,const GameplayNativeProof& proof,const GameplayCodeProfile* code=nullptr){
     GameplayApplyTimer pure_time(2);
-    gameplay_pure(entry);lookup_entry_final(proof.root_path);require(proof.image&&gameplay_native_image()==proof.image,"native gameplay original absolute image changed");
+    gameplay_pure(entry);lookup_entry_final(proof.root_path);require(proof.image&&gameplay_native_image(code)==proof.image,"native gameplay original absolute image changed");
     const auto* root=lookup_node_get(proof.root_path.pinned.front(),proof.root_path.zero_item);const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
     const auto* outer=source_outer(root);require(outer!=nullptr,"native gameplay original root Outer unavailable");gameplay_native_root_fields(root,pawn,*outer,proof);
     lookup_entry_final(proof.root_path);gameplay_pure(entry);
@@ -434,9 +490,12 @@ struct GameplayNativeWatch;
 thread_local const GameplayNativeWatch* gameplay_native_active{};
 struct GameplayNativeWatch {
     const GameplayNativeWatch* previous{gameplay_native_active};const GameplayPawn& entry;const GameplayNativeProof& proof;const void* operation{active_lookup};
-    GameplayNativeWatch(const GameplayPawn& e,const GameplayNativeProof& p):entry(e),proof(p){gameplay_native_pure(entry,proof);gameplay_native_active=this;}
+    const GameplayCodeProfile code{gameplay_code_bind()};
+    GameplayNativeWatch(const GameplayPawn& e,const GameplayNativeProof& p):entry(e),proof(p){gameplay_native_pure(entry,proof,&code);gameplay_native_active=this;}
     ~GameplayNativeWatch(){gameplay_native_active=previous;}
 };
+const GameplayCodeProfile* gameplay_native_profile(){if(!gameplay_native_active)return nullptr;
+    require(active_lookup==gameplay_native_active->operation,"native gameplay absolute operation reentry");return &gameplay_native_active->code;}
 void gameplay_native_guard(){if(!gameplay_native_active)return;GameplayApplyTimer guard_time(0);require(active_lookup==gameplay_native_active->operation,"native gameplay absolute operation reentry");
     gameplay_native_pure(gameplay_native_active->entry,gameplay_native_active->proof);}
 GameplayNativeProof gameplay_native_bind(const GameplayPawn& entry,Obj root){

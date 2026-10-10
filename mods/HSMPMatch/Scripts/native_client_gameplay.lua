@@ -1,6 +1,7 @@
 -- Native pawn bootstrap. Receipt, construction and possession are separate.
 local M={}
 local PENDING="native gameplay pawn preparing"
+local preparation={begin="present",passport="character",construct="present",equipment="equipment",possess="controls",post_equipment="check_equipment"}
 local BOOTSTRAP_KEYS={schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true}
 local function fail(reason)error(reason,0)end
 local function exact_integer(v)return math.type(v)=="integer" and v>=0 end
@@ -161,8 +162,8 @@ function M.new(env)
             if row then
                 local entity=scene.entities[self.cursor]
                 if not entity or entity.id~=row.id or entity.incarnation~=row.incarnation or entity.revision~=row.revision then fail("client gameplay generation")end
+                env.progress(preparation[row.stage])
                 if row.stage=="begin"then
-                    env.progress("present",self.cursor-1,#self.rows)
                     local handle,pawn=guarded(require_api("native_gameplay_begin"),scene,world:GetAddress(),pc:GetAddress(),entity.id)
                     if not handle then fail(pawn or"native gameplay deferred spawn refused")end
                     row.handle=handle;row.stage="passport"
@@ -191,6 +192,7 @@ function M.new(env)
                 end
                 return nil,PENDING
             end
+            env.progress("sync")
             if scene.fresh~=true then return nil,"native gameplay result is stale"end
             if scene.state==2 and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
                 started=clock();if started then

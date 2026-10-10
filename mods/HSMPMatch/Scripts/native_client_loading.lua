@@ -2,7 +2,10 @@
 -- server transfer and unknown view readiness never receive a timer percentage.
 local M={}
 local labels={connecting="Connecting to your match",travel="Loading the arena",waiting="Waiting for the match",
-    assets="Loading player assets",present="Creating player models",view="Preparing your view",error="Unable to load the match"}
+    assets="Loading player assets",present="Creating player models",character="Preparing player characters",equipment="Restoring player equipment",
+    controls="Preparing your controls",check_equipment="Checking player equipment",sync="Synchronizing the latest match state",
+    view="Preparing your view",error="Unable to load the match"}
+local preparation={present=true,character=true,equipment=true,controls=true,check_equipment=true,sync=true}
 function M.new(env)
     local self={host=nil,stage="connecting",done=nil,total=nil,failed=false,ready=false,retry_at=0,failures=0,
         started_at=env.now(),paint_at=0,force_update=true}
@@ -77,9 +80,9 @@ function M.new(env)
         self.paint_at=0;self.force_update=true
         if not self.failed then self.stage="waiting"end
     end -- world drop never touches old UObjects
-    function self:set(stage,done,total)
+    function self:set(stage,done,total,from_status)
         if self.failed then return end
-        if (self.ready or self.stage=="view")and stage=="present"then return end
+        if not from_status and(self.ready or self.stage=="view")and preparation[stage]then return end
         local next_stage=labels[stage]and stage or "waiting"
         local previous_done,previous_total=self.done,self.total
         if self.stage~=next_stage then self.force_update=true end
@@ -105,6 +108,8 @@ function M.new(env)
         elseif state=="travel"then self:set("travel")
         elseif state=="boot"or state=="connected"then self:set("connecting")
         elseif state=="wait_scene"and reason=="native scene assets loading"and self.stage=="present"then return
+        elseif state=="wait_scene"and reason=="native gameplay pawn preparing"and preparation[self.stage]then return
+        elseif state=="wait_scene"and reason=="native gameplay result is stale"then self:set("sync",nil,nil,true)
         elseif self.stage~="assets"then self:set("waiting")end
     end
     function self:fail(reason)
