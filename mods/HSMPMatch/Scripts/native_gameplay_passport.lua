@@ -349,14 +349,19 @@ function M.after_finish(recipe,env)
     end)
     if not ok then return nil,why end;return true
 end
-local function invoke_armor(env,clear_previous,no_check_block)
+local function invoke_native_checked(env,key,before_call,...)
+    local args=table.pack(...)
     checked(env,function()
-        local pawn=current(env);local fn=pawn["Set Up Armor"]
+        local pawn=current(env);local fn=pawn[key]
         if (type(fn)~="userdata"and type(fn)~="table")or fn:type()~="UFunction"or fn:IsValid()~=true or
-            fn:GetFullName()~="Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Set Up Armor"then fail("native Set Up Armor unavailable")end
-        pawn=current(env);fn(pawn,clear_previous,no_check_block)
+            fn:GetFullName()~="Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..key then fail("native "..key.." unavailable")end
+        pawn=current(env)
+        if before_call then before_call(pawn)end
+        fn(pawn,table.unpack(args,1,args.n))
     end)
 end
+local function invoke_native(env,key,...)return invoke_native_checked(env,key,nil,...)end
+local function invoke_armor(env,clear_previous,no_check_block)return invoke_native(env,"Set Up Armor",clear_previous,no_check_block)end
 -- Native armor update703 uses (false,true). Reconstruct only a successfully
 -- copied mismatch, with every source live passport; restore the original
 -- construction map before returning, including guarded error cleanup.
@@ -412,16 +417,40 @@ function M.setup_hand(record_value,side,env,controls)
         if not integer(record_value.id,1,32)then fail("live weapon id")end
         asset(record_value.actor_class,false);validate_passport("weapon",record_value.passport)
         if side~=0 and side~=1 then fail("native hand slot")end
-        record(controls,{dropped_with_no_damage=true,destroy_previous=true,actor=true},"native hand controls")
+        local keys={dropped_with_no_damage=true,destroy_previous=true,actor=true}
+        if type(controls)=="table"and rawget(controls,"actor_field")~=nil then keys.actor_field=true end
+        record(controls,keys,"native hand controls")
         if type(controls.dropped_with_no_damage)~="boolean" or type(controls.destroy_previous)~="boolean"then fail("native hand controls unsupported")end
-        local pass=marshal("weapon",record_value.passport,env);local cls=class(env,record_value.passport.class)
-        checked(env,function()
-            if type(env.weapon_guard)~="function" or env.weapon_guard(controls.actor,side==0 and "Weapon R" or "Weapon L",record_value.id)~=true then fail("native weapon original scope unavailable")end
-            local pawn=current(env);local fn=pawn[side==0 and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"]
-            if type(fn)~="function"then fail("native hand setup unavailable")end
-            fn(pawn,cls,controls.actor,controls.dropped_with_no_damage,controls.destroy_previous,pass)
-        end)
-        local field=side==0 and "Weapon R" or "Weapon L"
+        local field=side==0 and "Weapon R"or "Weapon L"
+        local origin=controls.actor_field or field;local allowed=origin=="Weapon R"or origin=="Weapon L"
+        for _,key in ipairs(sheath_fields)do if origin==key then allowed=true end end
+        if not allowed then fail("native weapon original field unsupported")end
+        local pass=marshal("weapon",record_value.passport,env)
+        local spawn_class=record_value.passport.class
+        if checked(env,function()return controls.actor:GetAddress()end)==0 then
+            if checked(env,function()return controls.actor:type()end)~="UObject"then fail("native weapon null object unavailable")end
+            if spawn_class~=""and spawn_class~=record_value.actor_class then fail("native weapon spawn class differs from captured actor class")end
+            if spawn_class==""then spawn_class=record_value.actor_class end
+        elseif type(env.weapon_guard)~="function"or checked(env,function()return env.weapon_guard(controls.actor,origin,record_value.id)end)~=true then
+            fail("native weapon original scope unavailable")
+        end
+        local cls=class(env,spawn_class)
+        if checked(env,function()return controls.actor:GetAddress()end)==0 then
+            local target=checked(env,function()return current(env)[field]end)
+            if not target or checked(env,function()return target:GetAddress()end)~=0 then fail("native missing hand binding changed")end
+        elseif checked(env,function()return env.weapon_guard(controls.actor,origin,record_value.id)end)~=true then
+            fail("native weapon original scope unavailable")
+        end
+        invoke_native_checked(env,side==0 and "Set Up Right Hand Weapon"or "Set Up Left Hand Weapon",function(pawn)
+            if controls.actor:GetAddress()==0 then
+                local target=pawn[field]
+                if controls.actor:type()~="UObject"or not target or target:type()~="UObject"or target:GetAddress()~=0 then
+                    fail("native missing hand binding changed")
+                end
+            elseif type(env.weapon_guard)~="function"or env.weapon_guard(controls.actor,origin,record_value.id)~=true then
+                fail("native weapon original scope unavailable")
+            end
+        end,cls,controls.actor,controls.dropped_with_no_damage,controls.destroy_previous,pass)
         local function fresh()
             return checked(env,function()
                 local actor=current(env)[field]
@@ -432,6 +461,80 @@ function M.setup_hand(record_value,side,env,controls)
         if class_path(env,checked(env,function()return fresh():GetClass()end))~=record_value.actor_class then fail("native equipped hand class mismatch")end
         local copied,reason=D.read_passport("weapon",function()return fresh()["Weapon Passport"]end,reader(env))
         if not copied then fail(reason)end;equal(copied,record_value.passport,"native equipped hand passport");fresh()
+    end)
+    if not ok then return nil,why end;return true
+end
+-- Match every original hard field first. Native startup5707/5874 uses the full
+-- passport and (Dropped=false,DestroyPrevious=true) for a missing held actor.
+-- Existing-actor hand transfer uses (false,false); never spawn a second alias.
+function M.restore_live_weapons(recipe,env)
+    local ok,why=pcall(function()
+        local p=validate(recipe);local signature=D.signature(p)
+        local expected,records,origins={},{},{}
+        for _,w in ipairs(p.equipment.weapons)do records[w.id]=w end
+        for _,h in ipairs(p.equipment.hands)do expected[h.slot==0 and "Weapon R"or "Weapon L"]=h.item end
+        for _,s in ipairs(p.equipment.sheaths)do expected[s.field]=s.item end
+        local function actor(field)return checked(env,function()return current(env)[field]end)end
+        local function qualified(field,w)
+            return checked(env,function()
+                local o=actor(field)
+                if not o or o:GetAddress()==0 or type(env.weapon_guard)~="function"or env.weapon_guard(o,field,w.id)~=true then
+                    fail("native weapon original scope unavailable: "..field)
+                end
+                return o
+            end)
+        end
+        local function verify(field,w)
+            if class_path(env,checked(env,function()return qualified(field,w):GetClass()end))~=w.actor_class then
+                fail("native weapon actor class mismatch: "..field)
+            end
+            local copied,reason=D.read_passport("weapon",function()return qualified(field,w)["Weapon Passport"]end,reader(env))
+            if not copied then fail(reason)end;equal(copied,w.passport,"native live weapon passport");qualified(field,w)
+        end
+        local missing=false
+        for _,field in ipairs({"Weapon R","Weapon L",table.unpack(sheath_fields)})do
+            local o=actor(field);if not o then fail("native weapon field unavailable: "..field)end
+            local address=checked(env,function()return o:GetAddress()end);local id=expected[field]
+            if address~=0 then
+                if not id then fail("native unexpected weapon: "..field)end
+                verify(field,records[id]);origins[id]=origins[id]or field
+            elseif id then missing=true end
+        end
+        -- Refuse missing sheath-only creation before any native setup operation.
+        for _,w in ipairs(p.equipment.weapons)do
+            if not origins[w.id]then
+                local hand=false;for _,h in ipairs(p.equipment.hands)do if h.item==w.id then hand=true end end
+                if not hand then fail("native missing sheath-only weapon creation unsupported: id="..w.id)end
+            end
+        end
+        if missing then
+            for _,h in ipairs(p.equipment.hands)do
+                local field=h.slot==0 and "Weapon R"or "Weapon L";local target=actor(field)
+                if checked(env,function()return target:GetAddress()end)==0 then
+                    local origin=origins[h.item];local original=origin and qualified(origin,records[h.item])or target
+                    local done,reason=M.setup_hand(records[h.item],h.slot,env,{actor=original,actor_field=origin or field,
+                        dropped_with_no_damage=false,destroy_previous=origin==nil})
+                    if done~=true then fail(reason)end;origins[h.item]=origin or field
+                end
+            end
+            for _,s in ipairs(p.equipment.sheaths)do
+                if checked(env,function()return actor(s.field):GetAddress()end)==0 then
+                    local origin=origins[s.item];local slot
+                    for i,field in ipairs(sheath_fields)do if field==s.field then slot=i-1 end end
+                    local original=qualified(origin,records[s.item])
+                    invoke_native_checked(env,"Sheathe on Spawn",function(pawn)
+                        if type(env.weapon_guard)~="function"or env.weapon_guard(original,origin,s.item)~=true then
+                            fail("native weapon original scope unavailable")
+                        end
+                        local target=pawn[s.field]
+                        if not target or target:type()~="UObject"or target:GetAddress()~=0 then fail("native missing sheath binding changed")end
+                    end,original,slot)
+                    verify(s.field,records[s.item])
+                end
+            end
+        end
+        local verified,reason=M.verify_equipment(recipe,env);if verified~=true then fail(reason)end
+        if D.signature(validate(recipe))~=signature then fail("gameplay source recipe changed")end;guard(env)
     end)
     if not ok then return nil,why end;return true
 end

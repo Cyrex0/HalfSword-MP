@@ -3,7 +3,7 @@ local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
-    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,apply_count=0,confirmed=0}
+    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0}
     local cls={GetAddress=function()return 100 end}
     local function pawn(id)
         local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
@@ -41,6 +41,10 @@ local function fixture()
         check(env.guard()==true,"live armor restoration remains original-pawn guarded")
         f.armor=f.armor+1;f.calls[#f.calls+1]="armor"..recipe.passport.fixture_id
         if f.armor_error then return nil,f.armor_error end;return true
+    end,restore_live_weapons=function(recipe,env)
+        check(env.guard()==true,"live weapon restoration remains original-pawn guarded")
+        f.weapons=f.weapons+1;f.calls[#f.calls+1]="weapons"..recipe.passport.fixture_id
+        if f.weapon_error then return nil,f.weapon_error end;return true
     end,verify_equipment=function(recipe,env)
         f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
         f.calls[#f.calls+1]="gear"..recipe.passport.fixture_id
@@ -56,13 +60,13 @@ local function fixture()
 end
 do
     local f=fixture();f:bootstrap()
-    check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,gear2,possess2,gear2","native construction/live armor/gear/possession order including post-possession proof")
+    check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,weapons2,gear2,possess2,gear2","native construction/live armor/weapons/gear/possession order including post-possession proof")
     check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
     f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
     check(ok==true and actual==f.scene and f.confirmed==1 and f.game:view_ready(actual),"complete raw state proof follows whole-roster Lua gear callbacks before readiness")
     check(table.concat(f.calls,","):match("apply,gear1,gear2,confirm$"),"confirmation runs after both final gear checks")
     check(#f.actions==6 and f.actions[1].value==0.25 and f.actions[2].value==-0.5 and f.actions[3].value.KeyName=="None","exact accepted movement and source default FKey Run replay before reconciliation")
-    f.game:apply(f.scene);check(#f.actions==10 and f.armor==2,"held Run never repeats press and live armor restoration runs once per constructed pawn")
+    f.game:apply(f.scene);check(#f.actions==10 and f.armor==2 and f.weapons==2,"held Run never repeats press and gear restoration runs once per constructed pawn")
     local axes,buttons=Gameplay.intent(actual,actual.entities[1]);check(axes[1]==1 and axes[2]==0 and buttons==1,"first acceptance intent is only Move+Run")
     actual.fresh=false;check(Gameplay.intent(actual,actual.entities[1])==nil,"stale result cannot drive even bounded test intent")
     f.game:drop();check(f.forgot==1 and #f.game.rows==0,"world drop is scalar forget only")
@@ -81,6 +85,13 @@ do
     local ok,why=f.game:apply(f.scene)
     check(ok==nil and why==f.armor_error and f.equipment==0 and f.confirmed==0,
         "construction armor restoration failure prevents verification, possession and readiness")
+end
+do
+    local f=fixture();for _=1,3 do f.game:apply(f.scene)end
+    f.weapon_error="native exact weapon binding unsupported"
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.weapon_error and f.armor==1 and f.weapons==1 and f.equipment==0 and f.confirmed==0,
+        "native weapon restoration failure prevents verification, possession and readiness")
 end
 do
     local f=fixture();f.game:apply(f.scene);check(f.game:owned(f.pawns[1]),"suppression exemption requires a freshly requalified owned native pawn")

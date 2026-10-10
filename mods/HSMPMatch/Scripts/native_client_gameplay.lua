@@ -162,6 +162,9 @@ function M.new(env)
                     if type(Passport.restore_live_armor)~="function"then fail("native gameplay live armor restoration unavailable")end
                     local restored,restore_reason=Passport.restore_live_armor(row.recipe,passport_env(row))
                     if restored~=true then fail(restore_reason or"native gameplay live armor restoration refused")end
+                    if type(Passport.restore_live_weapons)~="function"then fail("native gameplay live weapon restoration unavailable")end
+                    local equipped,equip_reason=Passport.restore_live_weapons(row.recipe,passport_env(row))
+                    if equipped~=true then fail(equip_reason or"native gameplay live weapon restoration refused")end
                     local verified,why=Passport.verify_equipment(row.recipe,passport_env(row))
                     if verified~=true then fail(why or"native gameplay equipment differs from authority")end;row.stage="possess"
                 elseif row.stage=="possess"then

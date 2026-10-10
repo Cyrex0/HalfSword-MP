@@ -18,6 +18,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Bootstrap gameplay clients with complete native gear and construction recipes
   without harvesting mirror geometry or vertex colours. Populate native passport
   maps through typed operations to avoid UE4SS's nested table conversion error.
+- Restore captured live armor and held weapons through the game's native setup
+  routines before possession, preserving complete passports and shared weapon
+  bindings. Missing sheath-only creation remains unsupported; native verification
+  is still in progress.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

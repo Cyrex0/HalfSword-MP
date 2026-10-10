@@ -158,7 +158,7 @@ env,pawn,values,calls,set_alive,write_count,methods=environment(recipe)
 ok,why=P.before_finish(recipe,env);T.check(ok==true,"source live and construction equipment remain separate inputs")
 values["Currently Equipped Armor"]=map({[12]=native("armor",assert(P.marshal("armor",recipe.equipment.armor[1].passport,env)))})
 -- Actual hard actor fields expose invalid address0 wrappers for observed nulls.
-local absent={GetAddress=function()return 0 end}
+local absent={GetAddress=function()return 0 end,type=function()return "UObject"end}
 for _,key in ipairs({"Weapon R","Weapon L","Weapon Slot R 1","Weapon Slot R 2","Weapon Slot Back","Weapon Slot L 1","Weapon Slot L 2"})do values[key]=absent end
 local live={GetAddress=function()return 123 end,IsValid=function()return true end,
     GetClass=function()return class(recipe.equipment.weapons[1].actor_class)end,["Weapon Passport"]=assert(P.marshal("weapon",weapon,env))}
@@ -187,12 +187,12 @@ T.check(refused==nil and #calls==0,"missing native setup control refuses without
 ok,why=P.setup_armor(recipe,env,{clear_previous=false,no_check_block=true})
 T.check(ok==true and #calls==1 and calls[1][1]==false and calls[1][2]==true,"explicit native method controls passed once then complete live gear verified")
 local called
-methods["Set Up Right Hand Weapon"]=function(_,cls,actor,dropped,destroy,pass)called={cls,actor,dropped,destroy,pass}end
+methods["Set Up Right Hand Weapon"]=native_function("Set Up Right Hand Weapon",function(_,cls,actor,dropped,destroy,pass)called={cls,actor,dropped,destroy,pass}end)
 ok,why=P.setup_hand(recipe.equipment.weapons[1],0,env,{actor=live,dropped_with_no_damage=false,destroy_previous=true})
 T.check(ok==true and called[2]==live and called[3]==false and called[4]==true,"exact native five-argument hand method invoked without CDO substitute")
 T.check(called[1]:GetFullName():match("^%S+%s+(.+)$")==weapon.class and called[1]:GetFullName():match("^%S+%s+(.+)$")~=recipe.equipment.weapons[1].actor_class,
     "native passport class and actual spawned actor class preserve distinct observed values")
-methods["Set Up Right Hand Weapon"]=function()live["Weapon Passport"][D.FIELDS.weapon[2][1]]=77 end
+methods["Set Up Right Hand Weapon"]=native_function("Set Up Right Hand Weapon",function()live["Weapon Passport"][D.FIELDS.weapon[2][1]]=77 end)
 refused,reason=P.setup_hand(recipe.equipment.weapons[1],0,env,{actor=live,dropped_with_no_damage=false,destroy_previous=true})
 T.check(refused==nil and reason:find("equipped hand passport differs",1,true),"native setup callback must produce the exact actual source weapon passport")
 do
@@ -240,4 +240,112 @@ do
     restored,error_reason=P.restore_live_armor(recipe,e)
     T.check(restored==nil and error_reason:find("scope changed",1,true)and error_reason:find("restoration refused",1,true),
         "update callback world loss prevents old-pawn cleanup writes and reports failed restoration")
+end
+
+do
+    local held=clone(recipe)
+    held.equipment.weapons[1].actor_class=held.equipment.weapons[1].passport.class
+    held.equipment.hands={{slot=0,item=1},{slot=1,item=1}}
+    local function weapon_environment(r)
+        local e,p,v,_,alive,_,m=environment(r);assert(P.before_finish(r,e))
+        local entries={};for _,row in ipairs(r.equipment.armor)do entries[row.slot]=native("armor",assert(P.marshal("armor",row.passport,e)))end
+        v["Currently Equipped Armor"]=map(entries)
+        for _,field in ipairs({"Weapon R","Weapon L","Weapon Slot R 1","Weapon Slot R 2","Weapon Slot Back","Weapon Slot L 1","Weapon Slot L 2"})do v[field]=absent end
+        local counts={spawn=0,hand=0,sheath=0};local pins={}
+        e.weapon_guard=function(o,field,id)
+            if v[field]~=o or o:GetAddress()==0 then return false end
+            if pins[id]and pins[id]~=o:GetAddress()then return false end;pins[id]=o:GetAddress();return e.guard()
+        end
+        for _,field in ipairs({"Weapon R","Weapon L"})do
+            local key=field=="Weapon R"and "Set Up Right Hand Weapon"or "Set Up Left Hand Weapon"
+            m[key]=native_function(key,function(_,cls,o,dropped,destroy,pass)
+                counts.hand=counts.hand+1
+                assert(dropped==false)
+                if o:GetAddress()==0 then
+                    assert(o:type()=="UObject"and destroy==true);counts.spawn=counts.spawn+1
+                    assert(cls:GetFullName():match("^%S+%s+(.+)$")==r.equipment.weapons[1].actor_class)
+                    o={GetAddress=function()return 400+counts.spawn end,IsValid=function()return true end,
+                        GetClass=function()return class(r.equipment.weapons[1].actor_class)end,["Weapon Passport"]=native("weapon",pass)}
+                else assert(destroy==false)end
+                v[field]=o
+            end)
+        end
+        m["Sheathe on Spawn"]=native_function("Sheathe on Spawn",function(_,o,slot)
+            counts.sheath=counts.sheath+1
+            local fields={"Weapon Slot R 1","Weapon Slot R 2","Weapon Slot Back","Weapon Slot L 1","Weapon Slot L 2"}
+            assert(v["Weapon R"]==o or v["Weapon L"]==o);v[assert(fields[slot+1])]=o
+        end)
+        return e,v,m,counts,alive
+    end
+    local e,v,m,c,alive=weapon_environment(held)
+    local restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==true and c.spawn==1 and c.hand==2 and c.sheath==1,
+        "missing held actor uses proved native startup args, then one original actor for both hands/sheath: "..tostring(reason))
+    T.check(v["Weapon R"]==v["Weapon L"]and v["Weapon R"]==v["Weapon Slot Back"],"logical shared source id never duplicates a spawned actor")
+    local read=assert(D.read_passport("weapon",function()return v["Weapon R"]["Weapon Passport"]end,read_env))
+    T.check(D.signature(read)==D.signature(held.equipment.weapons[1].passport),"native spawned actor retains all25 original fields")
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==true and c.spawn==1 and c.hand==2 and c.sheath==1,"exact existing source gear skips all native setup calls")
+    local cp=assert(D.read_passport("character",function()return v["Character Passport"]end,read_env))
+    T.check(D.signature(cp)==D.signature(held.passport),"weapon restoration never substitutes captured construction passport fields")
+    local only_sheath=clone(held);only_sheath.equipment.hands={}
+    e,v,m,c=weapon_environment(only_sheath);restored,reason=P.restore_live_weapons(only_sheath,e)
+    T.check(restored==nil and reason:find("sheath-only weapon creation unsupported",1,true)and c.hand==0 and c.sheath==0,
+        "new missing sheath-only actor explicitly refuses before native setup")
+    e,v,m,c=weapon_environment(held);v["Weapon R"]=nil;restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("field unavailable",1,true)and c.hand==0,"missing wrapper is never inferred to be an observed null Actor")
+    e,v,m,c=weapon_environment(held);v["Weapon R"]={GetAddress=function()return 0 end,type=function()return "UClass"end}
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("null object unavailable",1,true)and c.hand==0,"null UClass cannot substitute the native nullable Actor argument")
+    e,v,m,c=weapon_environment(held);m["Set Up Right Hand Weapon"]=function()c.hand=c.hand+1 end
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("Set Up Right Hand Weapon unavailable",1,true)and c.hand==0,
+        "ordinary Lua function cannot stand in for the actual typed UFunction")
+    e,v,m,c,alive=weapon_environment(held)
+    m["Set Up Right Hand Weapon"]=native_function("Set Up Right Hand Weapon",function()alive(false)end)
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("scope changed",1,true)and c.sheath==0,"native hand callback world loss blocks further actor reads/sheath/ready")
+    local wrong=clone(held);wrong.equipment.weapons[1].actor_class="/Game/Weapons/Wrong.Wrong_C"
+    e,v,m,c=weapon_environment(wrong);restored,reason=P.restore_live_weapons(wrong,e)
+    T.check(restored==nil and reason:find("spawn class differs",1,true)and c.hand==0,"native passport class priority cannot silently replace actual source actor class")
+    e,v,m,c=weapon_environment(held)
+    local fn=m["Set Up Right Hand Weapon"]
+    m["Set Up Right Hand Weapon"]=native_function("Set Up Right Hand Weapon",function(...)
+        fn(...);v["Weapon R"]["Weapon Passport"][D.FIELDS.weapon[2][1]]=77
+    end)
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("equipped hand passport differs",1,true)and c.hand==1 and c.sheath==0,
+        "native setup changing one actual passport field refuses before any alias operation")
+    e,v,m,c=weapon_environment(held)
+    local metadata_fn=m["Set Up Right Hand Weapon"]
+    metadata_fn.GetFullName=function()
+        v["Weapon R"]={type=function()return "UObject"end,GetAddress=function()return 987 end}
+        return "Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Set Up Right Hand Weapon"
+    end
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("missing hand binding changed",1,true)and c.hand==0,
+        "function metadata replacing the original null target refuses before native hand dispatch")
+    e,v,m,c=weapon_environment(held)
+    v["Weapon R"]={GetAddress=function()return 701 end,IsValid=function()return true end,
+        GetClass=function()return class(held.equipment.weapons[1].actor_class)end,
+        ["Weapon Passport"]=assert(P.marshal("weapon",held.equipment.weapons[1].passport,e))}
+    m["Set Up Left Hand Weapon"].GetFullName=function()
+        v["Weapon R"]={GetAddress=function()return 702 end}
+        return "Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Set Up Left Hand Weapon"
+    end
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("original scope unavailable",1,true)and c.hand==0,
+        "function metadata replacing an original alias actor refuses before transfer dispatch")
+    e,v,m,c=weapon_environment(held)
+    v["Weapon R"]={GetAddress=function()return 703 end,IsValid=function()return true end,
+        GetClass=function()return class(held.equipment.weapons[1].actor_class)end,
+        ["Weapon Passport"]=assert(P.marshal("weapon",held.equipment.weapons[1].passport,e))}
+    v["Weapon L"]=v["Weapon R"]
+    m["Sheathe on Spawn"].GetFullName=function()
+        v["Weapon R"]={GetAddress=function()return 704 end}
+        return "Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Sheathe on Spawn"
+    end
+    restored,reason=P.restore_live_weapons(held,e)
+    T.check(restored==nil and reason:find("original scope unavailable",1,true)and c.sheath==0,
+        "function metadata replacing original held actor refuses before native sheath dispatch")
 end

@@ -2,6 +2,27 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Held-weapon candidate follows native startup5707/5874: exact captured class and
+all25 passport fields, actual typed-null hand, Dropped=false/DestroyPrevious=true.
+Existing logical actor aliases reuse one original actor rather than spawning
+duplicates. Unknown/wrong actors and missing sheath-only creation refuse. Caller
+restores armor, then weapons, before unchanged full gear verification/possession.
+Focused helper62/caller132 and syntax2 each PASS (offline). Final original actor
+and missing-target checks follow function metadata and latest-pawn callbacks;
+three replacement regressions refuse before dispatch. Independent narrow helper
+and caller reviews CLOSED; actual native retry pending. No gameplay parity claim.
+
+Actualf84c3828 fullG0/dev/RequireG0/all396 StandardGameplay041713-6940fb:
+client1 native construct and restore_live_armor succeed, then full gear verification
+refuses `native missing weapon: Weapon R` (frame23/receipt42.755ms). No possession,
+ready/view/input established. Client2 original guard refusal follows primary
+weapon error; stage/freshness semantics remain unchanged. Early identity-based
+window coordinator qualifies both physically on secondary. Sky selects returned
+windows but processes exit before pixels; no screenshot/model proof. CleanupPASS
+four absent/save20 unchanged/nodumps. Evidence native_operator_summary in thatrun.
+Next exact native source weapon setup/alias verification, no guessed Fists,
+passport defaults, tolerance changes or duplicate detached weapon accepted.
+
 Actuala6adc862 fullG0 passes Lua77/Rust1377/79, pusheddev/RequireG0/all396;
 standardGameplay040054-7fc376. First two source captures16204–16666 and16671–17109
 total905ms; later recapture700ms. Prior full render bootstrap28.382s, separate-run
