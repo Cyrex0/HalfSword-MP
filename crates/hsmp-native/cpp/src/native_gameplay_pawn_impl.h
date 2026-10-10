@@ -3,7 +3,8 @@
 struct GameplayApplied {
     HsmpGameplayState expected{};HsmpGameplayProof proof{};
     Obj root{},movement{},mesh{},asset{};
-    LookupEntry root_path,movement_path,mesh_path,asset_path,camera_path,hud_path,owner_api_path;
+    LookupEntry root_path,movement_path,mesh_path,asset_path,camera_path,hud_path,owner_api_path,transform_api_path;
+    std::array<double,3> relative_rotation{},scale{};
     HsmpProp root_field{},parent{},position{},rotation{},velocity{},health{},stamina{},mesh_field{},visible{},hidden{},skinned{},skeletal{};
     HsmpProp manager{},pc_owner{},view_target{},pending_target{},hud_field{},show_hud{};
 };
@@ -26,6 +27,18 @@ void gameplay_owner_code(){
         0xc8,0x4c,0x89,0x4a,0x20,0x48,0x8b,0x81,0x90,0,0,0,0x49,0x89,0,0xc3};
     require(pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe->OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&
         pe->OptionalHeader.SizeOfImage>0x3b54190+bytes.size()&&std::memcmp(image+0x3b54190,bytes.data(),bytes.size())==0,"native gameplay original GetOwner code changed");
+}
+void gameplay_transform_code(){
+    const auto* image=reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));require(image!=nullptr,"native gameplay shipping image unavailable");
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);require(dos->e_magic==IMAGE_DOS_SIGNATURE&&dos->e_lfanew>0&&dos->e_lfanew<65536,"native gameplay shipping image invalid");
+    const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
+    constexpr std::array<uint8_t,101> bytes{0x48,0x8b,0x42,0x20,0x45,0x33,0xc9,0x48,0x85,0xc0,0x41,0x0f,0x95,0xc1,0x4c,0x03,
+        0xc8,0x4c,0x89,0x4a,0x20,0x48,0x8b,0x81,0xa0,0x01,0,0,0x48,0x85,0xc0,0x74,0x08,0x48,0x05,0xd0,0x01,0,0,0xeb,0x07,
+        0x48,0x8d,0x05,0x20,0xe5,0x63,0x05,0x0f,0x28,0,0x41,0x0f,0x29,0,0x0f,0x28,0x48,0x10,0x41,0x0f,0x29,0x48,0x10,
+        0x0f,0x28,0x40,0x20,0x41,0x0f,0x29,0x40,0x20,0x0f,0x28,0x48,0x30,0x41,0x0f,0x29,0x48,0x30,0x0f,0x28,0x40,0x40,
+        0x41,0x0f,0x29,0x40,0x40,0x0f,0x28,0x48,0x50,0x41,0x0f,0x29,0x48,0x50,0xc3};
+    require(pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe->OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&
+        pe->OptionalHeader.SizeOfImage>0x34a5990+bytes.size()&&std::memcmp(image+0x34a5990,bytes.data(),bytes.size())==0,"native gameplay original GetTransform code changed");
 }
 thread_local const GameplayPawn* gameplay_active{};
 void gameplay_enum_disabled(Obj pawn,const wchar_t* field);
@@ -158,17 +171,18 @@ void gameplay_value_readback(Obj pawn,const wchar_t* field,const HsmpGameplayVal
     else{const auto actual=read<double>(pawn,field,L"DoubleProperty");require(std::memcmp(&actual,&expected.value,8)==0,"native gameplay f64 vital readback failed");}
 }
 using GameplayVector=std::array<double,3>;
+using GameplayOrientation=std::array<double,4>;
 void gameplay_finite(const double* values){for(uint32_t i=0;i<3;++i)require(std::isfinite(values[i]),"native gameplay state nonfinite");}
-void gameplay_root_readback(const HsmpGameplayState& expected,const GameplayVector& position,const GameplayVector& rotation,const GameplayVector& velocity){
-    const std::array<const double*,3> requested{expected.position,expected.rotation,expected.velocity};
-    const std::array<const double*,3> actual{position.data(),rotation.data(),velocity.data()};
-    constexpr std::array<const char*,3> fields{"position","rotation","velocity"};
-    uint32_t mask{};
-    for(uint32_t field=0;field<3;++field)for(uint32_t axis=0;axis<3;++axis)
-        if(std::memcmp(requested[field]+axis,actual[field]+axis,8)!=0)mask|=1u<<(field*3+axis);
+void gameplay_root_readback(const HsmpGameplayState& expected,const GameplayVector& position,const GameplayOrientation& orientation,const GameplayVector& velocity){
+    const std::array<const double*,3> requested{expected.position,expected.orientation,expected.velocity};
+    const std::array<const double*,3> actual{position.data(),orientation.data(),velocity.data()};
+    constexpr std::array<const char*,3> fields{"position","orientation","velocity"};
+    constexpr std::array<uint32_t,3> counts{3,4,3},starts{0,3,7};
+    uint32_t mask{},first_field{},first_axis{};
+    for(uint32_t field=0;field<3;++field)for(uint32_t axis=0;axis<counts[field];++axis)
+        if(std::memcmp(requested[field]+axis,actual[field]+axis,8)!=0){if(!mask){first_field=field;first_axis=axis;}mask|=1u<<(starts[field]+axis);}
     if(!mask)return;
-    uint32_t first{};while((mask&(1u<<first))==0)++first;
-    const auto field=first/3,axis=first%3;uint64_t requested_bits{},actual_bits{};
+    const auto field=first_field,axis=first_axis;uint64_t requested_bits{},actual_bits{};
     std::memcpy(&requested_bits,requested[field]+axis,8);std::memcpy(&actual_bits,actual[field]+axis,8);
     char reason[192]{};std::snprintf(reason,sizeof(reason),
         "native gameplay exact root/velocity readback failed; field=%s axis=%u req=%.17g got=%.17g bits=%016llx/%016llx mask=%03x",
@@ -183,17 +197,20 @@ void gameplay_enum_disabled(Obj pawn,const wchar_t* field){
 template<class T>T gameplay_raw(const void* object,const HsmpProp& prop){T value{};std::memcpy(&value,static_cast<const uint8_t*>(object)+prop.offset,sizeof(T));return value;}
 bool gameplay_raw_bool(const void* object,const HsmpProp& prop){require(prop.bool_mask!=0,"native gameplay bool mask missing");return (static_cast<const uint8_t*>(object)[prop.offset+prop.bool_offset]&prop.bool_mask)!=0;}
 void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame){
-    gameplay_pure(entry);gameplay_owner_code();lookup_entry_final(frame.owner_api_path);lookup_entry_final(frame.root_path);lookup_entry_final(frame.movement_path);lookup_entry_final(frame.mesh_path);lookup_entry_final(frame.asset_path);
+    gameplay_pure(entry);gameplay_owner_code();gameplay_transform_code();lookup_entry_final(frame.owner_api_path);lookup_entry_final(frame.transform_api_path);lookup_entry_final(frame.root_path);lookup_entry_final(frame.movement_path);lookup_entry_final(frame.mesh_path);lookup_entry_final(frame.asset_path);
     const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
     const auto* root=lookup_node_get(frame.root_path.pinned.front(),frame.root_path.zero_item);
     const auto* movement=lookup_node_get(frame.movement_path.pinned.front(),frame.movement_path.zero_item);
     const auto* mesh=lookup_node_get(frame.mesh_path.pinned.front(),frame.mesh_path.zero_item);
     for(const auto* component:{root,movement,mesh}){void* owner{};std::memcpy(&owner,static_cast<const uint8_t*>(component)+0x90,8);
         require(reinterpret_cast<uint64_t>(owner)==entry.pawn.address,"native gameplay final original component owner changed");}
-    require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pawn,frame.root_field))==frame.root.address&&gameplay_raw<void*>(root,frame.parent)==nullptr,
+    require(frame.root_field.offset==0x1a0&&reinterpret_cast<uint64_t>(gameplay_raw<void*>(pawn,frame.root_field))==frame.root.address&&gameplay_raw<void*>(root,frame.parent)==nullptr,
         "native gameplay original root binding changed");
+    EngineTransform world{};std::memcpy(&world,static_cast<const uint8_t*>(root)+0x1d0,sizeof(world));
+    require(std::memcmp(world.p,frame.expected.position,24)==0&&std::memcmp(world.q,frame.expected.orientation,32)==0&&
+        std::memcmp(world.scale,frame.scale.data(),24)==0,"native gameplay final exact native transform changed");
     require(std::memcmp(static_cast<const uint8_t*>(root)+frame.position.offset,frame.expected.position,24)==0&&
-        std::memcmp(static_cast<const uint8_t*>(root)+frame.rotation.offset,frame.expected.rotation,24)==0&&
+        std::memcmp(static_cast<const uint8_t*>(root)+frame.rotation.offset,frame.relative_rotation.data(),24)==0&&
         std::memcmp(static_cast<const uint8_t*>(movement)+frame.velocity.offset,frame.expected.velocity,24)==0,"native gameplay final root/velocity changed");
     const auto vital=[pawn](const HsmpProp& prop,const HsmpGameplayValue& value){
         if(value.kind==1){const float f=static_cast<float>(value.value);require(std::memcmp(static_cast<const uint8_t*>(pawn)+prop.offset,&f,4)==0,"native gameplay final f32 vital changed");}
@@ -217,18 +234,20 @@ void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame)
     }
     gameplay_pure(entry);
 }
-GameplayApplied gameplay_applied_snapshot(GameplayPawn& entry,const HsmpGameplayState& expected,const HsmpGameplayProof& proof,Obj movement){
+GameplayApplied gameplay_applied_snapshot(GameplayPawn& entry,const HsmpGameplayState& expected,const HsmpGameplayProof& proof,Obj movement,Obj original_root){
     GameplayApplied frame;frame.expected=expected;frame.proof=proof;frame.movement=movement;
-    frame.root=object_property(entry.pawn,L"RootComponent");require(frame.root.weak&&is(frame.root,L"/Script/Engine.SceneComponent"),"native gameplay root component unavailable");
+    frame.root=original_root;require(frame.root.weak&&same(object_property(entry.pawn,L"RootComponent"),frame.root)&&is(frame.root,L"/Script/Engine.SceneComponent"),"native gameplay root component unavailable");
     frame.mesh=object_property(entry.pawn,L"Mesh");frame.asset=mesh_asset(frame.mesh,nullptr);
     gameplay_owner_code();Function owner(L"/Script/Engine.ActorComponent:GetOwner");owner.field(L"ReturnValue",L"ObjectProperty",8);
     frame.owner_api_path=gameplay_path(owner.function);
     for(const auto component:{frame.root,movement,frame.mesh}){
         require(is(component,L"/Script/Engine.ActorComponent"),"native gameplay owner receiver class");
         require(same(returned(component,L"/Script/Engine.ActorComponent:GetOwner"),entry.pawn),"native gameplay original component owner mismatch");}
-    frame.root_field=property(entry.pawn,L"RootComponent",L"ObjectProperty",8);frame.parent=property(frame.root,L"AttachParent",L"ObjectProperty",8);
+    gameplay_transform_code();Function native_transform(L"/Script/Engine.Actor:GetTransform");native_transform.field(L"ReturnValue",L"StructProperty",96,L"Transform");frame.transform_api_path=gameplay_path(native_transform.function);
+    frame.root_field=property(entry.pawn,L"RootComponent",L"ObjectProperty",8);require(frame.root_field.offset==0x1a0,"native gameplay native transform root layout");frame.parent=property(frame.root,L"AttachParent",L"ObjectProperty",8);
     frame.position=property(frame.root,L"RelativeLocation",L"StructProperty",24);frame.rotation=property(frame.root,L"RelativeRotation",L"StructProperty",24);
     require(frame.position.sub==name(L"Vector")&&frame.rotation.sub==name(L"Rotator"),"native gameplay root schema");
+    frame.relative_rotation=read<GameplayVector>(frame.root,L"RelativeRotation",L"StructProperty");std::copy_n(entry.initial.scale,3,frame.scale.data());
     frame.velocity=property(movement,L"Velocity",L"StructProperty",24);
     frame.health=property(entry.pawn,L"Health",expected.health.kind==1?L"FloatProperty":L"DoubleProperty",expected.health.kind==1?4:8);
     frame.stamina=property(entry.pawn,L"Stamina",expected.stamina.kind==1?L"FloatProperty":L"DoubleProperty",expected.stamina.kind==1?4:8);
@@ -267,11 +286,13 @@ void gameplay_view(GameplayPawn& entry,HsmpGameplayProof& proof,HsmpViewResult* 
 int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const HsmpViewGuard* guard,HsmpGameplayProof* proof,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
-        require(state&&proof&&entry.stage==3,"native gameplay apply stage");*proof={};gameplay_finite(state->position);gameplay_finite(state->rotation);gameplay_finite(state->velocity);gameplay_local(entry,result);
+        require(state&&proof&&entry.stage==3,"native gameplay apply stage");*proof={};gameplay_finite(state->position);for(const auto value:state->orientation)require(std::isfinite(value),"native gameplay orientation nonfinite");gameplay_finite(state->velocity);gameplay_local(entry,result);
         gameplay_layouts();
-        Function transform(L"/Script/Engine.Actor:K2_SetActorLocationAndRotation");
-        GameplayVector position{},rotation{};std::copy_n(state->position,3,position.data());std::copy_n(state->rotation,3,rotation.data());
-        transform.put(L"NewLocation",L"StructProperty",position,L"Vector");transform.put(L"NewRotation",L"StructProperty",rotation,L"Rotator");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);transform.call(entry.pawn,result);
+        gameplay_transform_code();const auto root=object_property(entry.pawn,L"RootComponent");require(root.weak&&is(root,L"/Script/Engine.SceneComponent"),"native gameplay native transform root unavailable");
+        require(property(entry.pawn,L"RootComponent",L"ObjectProperty",8).offset==0x1a0&&!object_property(root,L"AttachParent").weak,"native gameplay native transform root layout/attachment");
+        Transform desired{};std::copy_n(state->position,3,desired.p);std::copy_n(state->orientation,4,desired.q);std::copy_n(entry.initial.scale,3,desired.scale);
+        Function transform(L"/Script/Engine.Actor:K2_SetActorTransform");
+        transform.put(L"NewTransform",L"StructProperty",engine(desired),L"Transform");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);transform.call(entry.pawn,result);
         require(transform.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay root setter refused");
         const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
         require(same(returned(movement,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay movement owner changed");
@@ -280,13 +301,15 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         proof->world=entry.world;proof->pawn=entry.pawn;proof->controller=entry.controller;proof->own=entry.own;
         proof->visible_meshes=gameplay_visible_body(entry,result);proof->flags|=HSMP_GAMEPLAY_VISIBLE_BODY;
         if(entry.own)gameplay_view(entry,*proof,result);
-        Function p(L"/Script/Engine.Actor:K2_GetActorLocation");p.call(entry.pawn,result);const auto actual_position=p.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
-        Function q(L"/Script/Engine.Actor:K2_GetActorRotation");q.call(entry.pawn,result);const auto actual_rotation=q.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Rotator");
+        require(same(object_property(entry.pawn,L"RootComponent"),root),"native gameplay original transform root changed");
+        Function native_transform(L"/Script/Engine.Actor:GetTransform");native_transform.call(entry.pawn,result);const auto actual=native_transform.value<EngineTransform>(L"ReturnValue",L"StructProperty",L"Transform");
+        require(same(object_property(entry.pawn,L"RootComponent"),root),"native gameplay original transform root changed");
+        GameplayVector actual_position{};GameplayOrientation actual_orientation{};std::copy_n(actual.p,3,actual_position.data());std::copy_n(actual.q,4,actual_orientation.data());
         Function v(L"/Script/Engine.Actor:GetVelocity");v.call(entry.pawn,result);const auto actual_velocity=v.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
-        gameplay_root_readback(*state,actual_position,actual_rotation,actual_velocity);
+        gameplay_root_readback(*state,actual_position,actual_orientation,actual_velocity);require(std::memcmp(actual.scale,entry.initial.scale,24)==0,"native gameplay exact actor scale readback failed");
         gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
         gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
-        auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement);
+        auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement,root);
         lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;return 1;
     }catch(const std::exception& error){if(proof)*proof={};failure(result,error.what());return -1;}
 }
@@ -314,4 +337,4 @@ int32_t gameplay_complete(const uint64_t* handles,uint32_t count,const HsmpViewG
         result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-const HsmpGameplay gameplay_provider{1,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};
+const HsmpGameplay gameplay_provider{2,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};

@@ -854,6 +854,7 @@ impl HostHandle {
                 | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
                 | hsmp_net::net::caps::NATIVE_SCENE_STREAM
                 | gp::CAP_NATIVE_GAMEPLAY
+                | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
                 | gp::CAP_NATIVE_COMPRESSION,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
@@ -998,7 +999,9 @@ impl ClientHandle {
         cfg.content_hash = crate::build_id::content_hash();
         cfg.caps |= hsmp_net::net::caps::NATIVE_WORLD | hsmp_net::net::caps::MODES;
         if gameplay {
-            cfg.caps |= gp::CAP_NATIVE_GAMEPLAY | gp::CAP_NATIVE_COMPRESSION;
+            cfg.caps |= gp::CAP_NATIVE_GAMEPLAY
+                | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | gp::CAP_NATIVE_COMPRESSION;
         }
         if presentation {
             cfg.caps |= hsmp_net::net::caps::NATIVE_PRESENTATION
@@ -1430,10 +1433,9 @@ async fn client_loop(
                         bridge.lock().error = "server has no native authority".into();
                         return;
                     }
-                    if cfg.caps & gp::CAP_NATIVE_GAMEPLAY != 0
-                        && caps & gp::CAP_NATIVE_GAMEPLAY == 0
-                    {
-                        bridge.lock().error = "server has no compact native gameplay".into();
+                    if cfg.caps & gp::CAP_NATIVE_GAMEPLAY != 0 && !gp::gameplay_capable(caps) {
+                        bridge.lock().error =
+                            "server has no exact-quaternion native gameplay".into();
                         return;
                     }
                     if cfg.caps & hsmp_net::net::caps::NATIVE_PRESENTATION != 0
@@ -1809,6 +1811,7 @@ pub(crate) mod tests {
                     position: [0.; 3],
                     rotation: [0.; 3],
                     velocity: [0.; 3],
+                    orientation: [0., 0., 0., 1.],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
                 })
@@ -1941,6 +1944,7 @@ pub(crate) mod tests {
                         position: [-0., 1.0000000000000002, 2.],
                         rotation: [0.; 3],
                         velocity: [0.; 3],
+                        orientation: [-0., 0.5000000000000001, -0.5, 0.7071067811865475],
                         health: gp::NativeScalar::F32(100.125f32.to_bits()),
                         stamina: gp::NativeScalar::F64(70.12345678901234f64.to_bits()),
                     })
@@ -1957,6 +1961,13 @@ pub(crate) mod tests {
                 first.result.entities[0].position[1].to_bits(),
                 1.0000000000000002f64.to_bits()
             );
+            for (actual, expected) in first.result.entities[0]
+                .orientation
+                .into_iter()
+                .zip(result.entities[0].orientation)
+            {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
             assert_eq!(
                 first.result.entities[0].health,
                 gp::NativeScalar::F32(100.125f32.to_bits())

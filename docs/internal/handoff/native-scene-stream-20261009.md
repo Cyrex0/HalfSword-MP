@@ -2,6 +2,38 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actualac6df880 fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
+standardGameplay050251-a090a7 reaches provider apply. Exact failure is only yaw
+oneULP: requested134.97148132324216/readback134.97148132324213,
+bits4060df165fffffff/4060df165ffffffe, nine-channel mask010. Position/velocity
+match bitexact; don't infer a physics velocity failure. Native quaternion→Euler
+conversion is pinned; pivot exact orientation capture/transport/native Transform
+setter and quaternion readback rather than relaxing checks. Readiness/input0/0.
+Early original windows secondaryPASS; selected Sky windows exit before pixels.
+CleanupPASS/four absent/save20/nodumps. Evidence native_operator_summary.
+Sol scopes: Descriptor source orientation, Net binary wire/full fixtures/bounds,
+Host private provider orientation/setter/readback. Root sole build/native operator.
+Quaternion candidate contract: orientation[f64;4] XYZW retained alongside current
+Euler diagnostics in resultversion2; append raw4f64, bound21+32*192. Required
+CAP_NATIVE_GAMEPLAY_QUATERNION bit30 with GP28 rejects old layout; compressed
+original-kind allocation uses the enlarged exact result bound. Private provider
+ABI2/State112 replaces Euler state with quaternion, preserving API72 byte order.
+Authority Actor:GetTransform (ObjectDump2644, F::ActorTransform) RVA34A5990 copies
+original root+1D0 Transform96; original nonnull root guards prohibit native
+identity fallback. Exact source/provider setter/pure final proof under review;
+no Euler reconstruction, arbitrary tolerance or runtime quaternion default.
+Candidate frozen: compact root admission precedes all actor_state getters;
+native setter/getter and callback-free root+1D0 p/q/scale proof retained. Root
+readback compares all four source quaternion doubles; local engine-derived Euler
+has an immutable snapshot for final mutation rejection. Focused server11/cap1,
+native gameplay8/source1 PASS; strict CPP compile and presentation1772 PASS.
+One compile-call overload mismatch corrected, retaining proved Rotator schema.
+Independent source-order/provider/native-mapping reviews CLOSED. FullG0/deploy
+and actual quaternion retry pending; no playability or combat parity claim.
+First combined G0 passed Lua77/Rust1378/79 but Clippy refused approximate
+sqrt(1/2) test literal. Fixture now uses the same exact rawf64 bit patterns;
+focused native all-target Clippy PASS. Runtime code unchanged. FullG0 retry next.
+
 Actualec9c60c4 fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
 standardGameplay045316-c0c96b client1 offered-result acquisition succeeds and
 provider apply frame198/dir7 executes, then refuses `native gameplay exact

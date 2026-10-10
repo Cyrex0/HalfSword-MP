@@ -6,7 +6,13 @@ use serde::{Deserialize, Serialize};
 
 pub const CAP_NATIVE_GAMEPLAY: u64 = 1 << 28;
 pub const CAP_NATIVE_COMPRESSION: u64 = 1 << 29;
-pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 160;
+pub const CAP_NATIVE_GAMEPLAY_QUATERNION: u64 = 1 << 30;
+pub const RESULT_VERSION: u8 = 2;
+pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 192;
+pub fn gameplay_capable(caps: u64) -> bool {
+    let required = CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION;
+    caps & required == required
+}
 pub const RECIPE_SCHEMA: u16 = 1;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -196,6 +202,8 @@ pub struct State {
     pub position: [f64; 3],
     pub rotation: [f64; 3],
     pub velocity: [f64; 3],
+    /// Exact native quaternion in XYZW order. No Euler reconstruction.
+    pub orientation: [f64; 4],
     pub health: NativeScalar,
     pub stamina: NativeScalar,
 }
@@ -240,6 +248,7 @@ impl ResultFrame {
                 .iter()
                 .chain(&e.rotation)
                 .chain(&e.velocity)
+                .chain(&e.orientation)
                 .any(|v| !v.is_finite())
             {
                 return Err("gameplay result transform");
@@ -303,7 +312,7 @@ fn read_scalar(r: &mut Reader<'_>) -> Result<NativeScalar, &'static str> {
 pub fn encode_result(v: &ResultFrame) -> Result<Vec<u8>, &'static str> {
     v.validate()?;
     let mut out = Vec::new();
-    out.put_u8(1);
+    out.put_u8(RESULT_VERSION);
     out.put_u64(v.epoch);
     out.put_u32(v.directory_seq);
     out.put_u32(v.authority_tick);
@@ -321,6 +330,9 @@ pub fn encode_result(v: &ResultFrame) -> Result<Vec<u8>, &'static str> {
         for v in e.position.into_iter().chain(e.rotation).chain(e.velocity) {
             out.put_u64(v.to_bits());
         }
+        for v in e.orientation {
+            out.put_u64(v.to_bits());
+        }
         scalar(&mut out, e.health);
         scalar(&mut out, e.stamina);
     }
@@ -336,7 +348,7 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
             r.$m().map_err(|_| "truncated gameplay result")?
         };
     }
-    if read!(u8) != 1 {
+    if read!(u8) != RESULT_VERSION {
         return Err("gameplay result version");
     }
     let epoch = read!(u64);
@@ -364,6 +376,10 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
         for v in p.iter_mut().flatten() {
             *v = f64::from_bits(read!(u64));
         }
+        let mut orientation = [0.; 4];
+        for v in &mut orientation {
+            *v = f64::from_bits(read!(u64));
+        }
         entities.push(State {
             reference,
             request_seq,
@@ -373,6 +389,7 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
             position: p[0],
             rotation: p[1],
             velocity: p[2],
+            orientation,
             health: read_scalar(&mut r)?,
             stamina: read_scalar(&mut r)?,
         });
@@ -533,6 +550,7 @@ mod tests {
                 position: [-0., 1.0000000000000002, 1e20],
                 rotation: [0.; 3],
                 velocity: [0.; 3],
+                orientation: [-0., 0.5000000000000001, -0.5, 0.7071067811865475],
                 health: NativeScalar::F32(99.125f32.to_bits()),
                 stamina: NativeScalar::F64(77.12345678901234f64.to_bits()),
             }],
@@ -545,6 +563,24 @@ mod tests {
         let got = decode_result(&bytes).unwrap();
         assert_eq!(got, original);
         assert_eq!(got.entities[0].position[0].to_bits(), (-0f64).to_bits());
+        for (actual, expected) in got.entities[0]
+            .orientation
+            .into_iter()
+            .zip(original.entities[0].orientation)
+        {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+        assert_eq!(bytes[0], RESULT_VERSION);
+        let mut legacy = bytes.clone();
+        legacy[0] = 1;
+        assert!(decode_result(&legacy).is_err());
+        // Old bodies omit the mandatory four native doubles; neither version
+        // label can make those bytes a complete current result.
+        let orientation_offset = 21 + 16 + 12 + 32 + 72;
+        legacy.drain(orientation_offset..orientation_offset + 32);
+        assert!(decode_result(&legacy).is_err());
+        legacy[0] = RESULT_VERSION;
+        assert!(decode_result(&legacy).is_err());
         for n in 0..bytes.len() {
             assert!(decode_result(&bytes[..n]).is_err());
         }
@@ -563,6 +599,17 @@ mod tests {
         v = frame();
         v.entities[0].delivery_seq = 0;
         assert!(v.validate().is_err());
+        v = frame();
+        v.entities[0].orientation[2] = f64::NAN;
+        assert!(v.validate().is_err());
+    }
+    #[test]
+    fn gameplay_requires_exact_quaternion_capability() {
+        assert!(!gameplay_capable(CAP_NATIVE_GAMEPLAY));
+        assert!(!gameplay_capable(CAP_NATIVE_GAMEPLAY_QUATERNION));
+        assert!(gameplay_capable(
+            CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION
+        ));
     }
     #[test]
     fn only_validated_inputs_are_requests() {

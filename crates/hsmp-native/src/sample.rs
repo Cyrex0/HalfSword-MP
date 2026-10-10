@@ -189,6 +189,15 @@ struct NativeGuard {
     pawn: u64, mesh: u64, pawn_address: usize, mesh_address: usize,
     mesh_property: HsmpProp, controller_property: HsmpProp,
     controller: u64, controller_address: usize, controller_pawn: Option<HsmpProp>,
+    root: Option<NativeRootGuard>,
+}
+#[derive(Clone)]
+struct NativeRootGuard {
+    weak: u64,
+    address: usize,
+    class: u64,
+    class_address: usize,
+    property: HsmpProp,
 }
 struct NativeEntityBinding { pawn: u64, mesh: u64, pawn_address: usize, mesh_address: usize, name: String }
 
@@ -471,6 +480,14 @@ impl Native {
                 u64::from_le_bytes(bytes[..8].try_into().unwrap_or([0; 8])) as usize
             };
             if pointer(pawn, g.mesh_property) != g.mesh_address || pointer(pawn, g.controller_property) != g.controller_address { return false; }
+            if let Some(original) = &g.root {
+                let root = reflect::get(vt, original.weak);
+                let class = reflect::get(vt, original.class);
+                if root as usize != original.address || class as usize != original.class_address
+                    || (vt.class_of)(root) != class || pointer(pawn, original.property) != original.address {
+                    return false;
+                }
+            }
             if g.controller_address != 0 {
                 let controller = reflect::get(vt, g.controller);
                 if controller as usize != g.controller_address { return false; }
@@ -638,6 +655,19 @@ impl Native {
             let vel = vec3(self.pbuf(), o[0] as usize);
             Some((pos, rot, vel))
         }
+    }
+
+    /// Exact original root quaternion from the verified native Transform96.
+    /// Actor:GetTransform returns an identity transform for a null root, so a
+    /// retained nonnull root binding is mandatory before and after this getter.
+    unsafe fn actor_orientation(&mut self, vt: &HsmpReflect, actor: *mut c_void) -> Option<[f64; 4]> {
+        self.sample.native_guard.as_ref()?.root.as_ref()?;
+        // SAFETY: the original actor/root binding is admitted by pe and checked
+        // again after the callback; no UObject is read from the copied result.
+        let offset = unsafe { self.pe(vt, F::ActorTransform, actor, |_, _| {}) }?;
+        if !self.native_guard_ok(vt) { return None; }
+        let (_, orientation) = self.transform_at(offset[0] as usize);
+        orientation.iter().all(|value| value.is_finite()).then_some(orientation)
     }
 
     /// The property names looked up on a pawn (control) or a weapon actor, in slot order.
@@ -1318,14 +1348,42 @@ impl Native {
                         controller,
                         controller_address,
                         controller_pawn,
+                        root: None,
                     });
                     if !self.native_guard_ok(vt) {
                         return Err("actor binding".into());
+                    }
+                    if compact {
+                        let root_property = object_property(pawn, "RootComponent")?;
+                        if !self.native_guard_ok(vt) {
+                            return Err("gameplay root admission changed".into());
+                        }
+                        let root_address = u64::from_le_bytes(
+                            Self::prop_bytes(pawn, &root_property).try_into().map_err(|_| "gameplay root bytes")?
+                        ) as usize;
+                        let root = live(vt, root_address as *mut c_void, classes[C_SCENE]).ok_or("gameplay original root unavailable")?;
+                        let root_class = (vt.class_of)(root);
+                        let original_root = NativeRootGuard {
+                            weak: reflect::keep(vt, root).ok_or("gameplay original root weak")?,
+                            address: root_address,
+                            class: reflect::keep(vt, root_class).ok_or("gameplay original root class weak")?,
+                            class_address: root_class as usize,
+                            property: root_property,
+                        };
+                        if !self.native_guard_ok(vt)
+                            || u64::from_le_bytes(Self::prop_bytes(pawn, &root_property).try_into().map_err(|_| "gameplay root bytes")?) as usize != root_address
+                            || reflect::get(vt, original_root.weak) != root
+                            || reflect::get(vt, original_root.class) != root_class
+                            || (vt.class_of)(root) != root_class {
+                            return Err("gameplay original root admission changed".into());
+                        }
+                        self.sample.native_guard.as_mut().ok_or("gameplay native guard")?.root = Some(original_root);
                     }
                     let (position, rotation, velocity) =
                         self.actor_state(vt, pawn).ok_or("actor root")?;
                     if compact {
                         use hsmp_server::native_gameplay_wire::{NativeScalar, State};
+                        let orientation = self.actor_orientation(vt, pawn).ok_or("gameplay original root transform")?;
                         let mut values = Vec::with_capacity(2);
                         for field in ["Health", "Stamina"] {
                             if !self.native_guard_ok(vt) {
@@ -1370,6 +1428,7 @@ impl Native {
                             position,
                             rotation,
                             velocity,
+                            orientation,
                             health: values[0],
                             stamina: values[1],
                         });
@@ -1691,5 +1750,86 @@ fn hot_msg(e: crate::pose_hot::HotErr) -> String {
     match e {
         crate::pose_hot::HotErr::NotOpen => "not open".into(),
         crate::pose_hot::HotErr::Bad(f) => format!("bad:{}", f),
+    }
+}
+
+#[cfg(test)]
+mod gameplay_orientation_tests {
+    use super::*;
+    use std::cell::{Cell, RefCell};
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Object { class: usize, mesh: usize, controller: usize, root: usize }
+    thread_local! {
+        static OBJECTS: RefCell<[usize; 7]> = const { RefCell::new([0; 7]) };
+        static MODE: Cell<u8> = const { Cell::new(0) };
+        static CALLS: Cell<u32> = const { Cell::new(0) };
+        static QUAT: Cell<[u64; 4]> = const { Cell::new([0; 4]) };
+    }
+    unsafe extern "C" fn resolve(weak: u64) -> *mut c_void {
+        if weak >> 32 != 1 || (weak as u32 == 3 && MODE.get() == 2) { return std::ptr::null_mut(); }
+        OBJECTS.with_borrow(|objects| objects.get(weak as u32 as usize).copied().unwrap_or(0)) as *mut c_void
+    }
+    unsafe extern "C" fn class_of(object: *mut c_void) -> *mut c_void {
+        // SAFETY: only the fixture's retained nonnull Object reaches this read.
+        unsafe { (*(object.cast::<Object>())).class as *mut c_void }
+    }
+    unsafe extern "C" fn call(_: *mut c_void, _: *mut c_void, params: *mut c_void) {
+        CALLS.set(CALLS.get() + 1);
+        // SAFETY: verified Transform96 parameter storage supplied by call_fn.
+        let output = unsafe { std::slice::from_raw_parts_mut(params.cast::<u8>(), 96) };
+        for (index, bits) in QUAT.get().into_iter().enumerate() { output[index * 8..index * 8 + 8].copy_from_slice(&bits.to_le_bytes()); }
+        OBJECTS.with_borrow(|objects| {
+            // SAFETY: objects point into the live stack fixture below.
+            unsafe {
+                if MODE.get() == 1 { (*(objects[1] as *mut Object)).root = objects[6]; }
+                if MODE.get() == 3 { (*(objects[3] as *mut Object)).class = objects[6]; }
+            }
+        });
+    }
+    unsafe extern "C" fn fname(_: *const u16, _: i32) -> u64 { 0 }
+    unsafe extern "C" fn find(_: *const u16) -> *mut c_void { std::ptr::null_mut() }
+    unsafe extern "C" fn is_a(_: *mut c_void, _: *mut c_void) -> i32 { 1 }
+    unsafe extern "C" fn props(_: *mut c_void, _: *mut HsmpProp, _: i32, _: *mut i32) -> i32 { 0 }
+    unsafe extern "C" fn obj_prop(_: *mut c_void, _: *const u16, _: *mut HsmpProp) -> i32 { 0 }
+    unsafe extern "C" fn weak(_: *mut c_void) -> u64 { 0 }
+
+    #[test]
+    fn exact_native_orientation_and_original_root_admission() {
+        let mut objects: [Object; 7] = std::array::from_fn(|_| Object::default());
+        let addresses: [usize; 7] = std::array::from_fn(|index| &mut objects[index] as *mut Object as usize);
+        objects[1].mesh = addresses[2]; objects[1].root = addresses[3]; objects[3].class = addresses[4];
+        OBJECTS.set(addresses); MODE.set(0); CALLS.set(0);
+        let bits = [(-0.0f64).to_bits(), 0.125f64.to_bits(), (-0.75f64).to_bits(), f64::from_bits(0x3fe0000000000001).to_bits()];
+        QUAT.set(bits);
+        let vt = HsmpReflect { abi: 1, _r: 0, fname, find, is_a, class_of, props, obj_prop, call, weak, resolve };
+        let handle = |index| (1u64 << 32) | index;
+        let property = |offset| HsmpProp { offset, size: 8, ..Default::default() };
+        let mut native = Native::new();
+        native.sample.native_sampling_active = true;
+        native.sample.native_guard = Some(NativeGuard {
+            pawn: handle(1), mesh: handle(2), pawn_address: addresses[1], mesh_address: addresses[2],
+            mesh_property: property(8), controller_property: property(16), controller: 0, controller_address: 0, controller_pawn: None,
+            root: Some(NativeRootGuard { weak: handle(3), address: addresses[3], class: handle(4), class_address: addresses[4], property: property(24) }),
+        });
+        let mut fns = [(0, [0; 4], 0); NFNS]; fns[F::ActorTransform as usize] = (handle(5), [0; 4], 96);
+        native.sample.world = Some(World { fns, classes: [0; 3], bones: Vec::new(), hand_l: 0, hand_r: 0, pawn_props: HashMap::new(), weapon_props: HashMap::new() });
+        // SAFETY: fixture addresses and verified parameter storage remain live.
+        let sample = |native: &mut Native| unsafe { native.actor_orientation(&vt, addresses[1] as *mut c_void) };
+        assert_eq!(sample(&mut native).unwrap().map(f64::to_bits), bits, "retain every native quaternion bit without normalization or Euler conversion");
+        assert_eq!(FNS[F::ActorTransform as usize].path, "/Script/Engine.Actor:GetTransform");
+        objects[1].root = 0;
+        assert!(sample(&mut native).is_none()); assert_eq!(CALLS.get(), 1, "never dispatch the null-root identity fallback");
+        objects[1].root = addresses[3]; MODE.set(1);
+        assert!(sample(&mut native).is_none(), "getter callback root replacement refuses copied output");
+        objects[1].root = addresses[3]; MODE.set(2);
+        assert!(sample(&mut native).is_none()); assert_eq!(CALLS.get(), 2, "expired original root refuses before dispatch");
+        MODE.set(3); assert!(sample(&mut native).is_none(), "original root class replacement refuses after callback");
+        objects[3].class = addresses[4]; MODE.set(0); QUAT.set([f64::NAN.to_bits(), 0, 0, 1.0f64.to_bits()]);
+        assert!(sample(&mut native).is_none(), "nonfinite native quaternion is unavailable, never a unit default");
+        native.sample.drop_world(true); let calls = CALLS.get();
+        assert!(sample(&mut native).is_none()); assert_eq!(CALLS.get(), calls, "world drop cannot resolve or invoke the old root");
+        OBJECTS.set([0; 7]);
     }
 }

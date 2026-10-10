@@ -5,7 +5,7 @@
 extern "C" {
 struct HsmpGameplayValue { uint32_t kind,pad; double value; }; // 1=f32, 2=f64
 struct HsmpGameplayState {
-    double position[3],rotation[3],velocity[3];
+    double position[3],orientation[4],velocity[3];
     HsmpGameplayValue health,stamina;
 };
 enum HsmpGameplayProofFlags : uint32_t {
@@ -32,7 +32,9 @@ struct HsmpGameplay {
 void hsmp_native_set_gameplay(const HsmpGameplay*);
 }
 static_assert(sizeof(HsmpGameplayValue)==16);
-static_assert(sizeof(HsmpGameplayState)==104);
+static_assert(sizeof(HsmpGameplayState)==112);
+static_assert(offsetof(HsmpGameplayState,orientation)==24);
+static_assert(offsetof(HsmpGameplayState,velocity)==56);
 static_assert(sizeof(HsmpGameplayProof)==112);
 static_assert(sizeof(HsmpGameplay)==72);
 static_assert(offsetof(HsmpGameplay,clear)==48);

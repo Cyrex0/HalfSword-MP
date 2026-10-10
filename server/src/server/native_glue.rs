@@ -128,7 +128,8 @@ impl NativeCore {
     }
     pub(super) fn admits_capabilities(&self, caps: u64) -> bool {
         if caps & gp::CAP_NATIVE_GAMEPLAY != 0 {
-            return caps & hsmp_net::net::caps::NATIVE_WORLD != 0
+            return gp::gameplay_capable(caps)
+                && caps & hsmp_net::net::caps::NATIVE_WORLD != 0
                 && caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0;
         }
         let required = hsmp_net::net::caps::NATIVE_WORLD
@@ -1001,6 +1002,15 @@ mod tests {
             "Map_Arena_Yard",
             crate::native_mode::Mode::Pvp,
         );
+        assert!(!pvp.admits_capabilities(caps | gp::CAP_NATIVE_GAMEPLAY));
+        assert!(pvp.admits_capabilities(
+            caps | gp::CAP_NATIVE_GAMEPLAY | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+        ));
+        assert!(!pvp.admits_capabilities(
+            caps | gp::CAP_NATIVE_GAMEPLAY
+                | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | hsmp_net::net::caps::NATIVE_PRESENTATION
+        ));
         assert!(!pvp.admits_capabilities(0));
         assert!(!pvp.admits_capabilities(caps));
         assert!(!pvp.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));

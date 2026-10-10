@@ -24,6 +24,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   is still in progress.
 - Retain the exact native state update offered to Lua through application, so a
   newer tick in the same generation cannot replace it or renew its expiry.
+- Carry native quaternion orientation as lossless doubles in the compact gameplay
+  stream, with a required capability and result version for the enlarged layout.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

@@ -26,7 +26,7 @@ pub struct Value {
 #[derive(Clone, Copy, Default)]
 pub struct NativeState {
     pub position: [f64; 3],
-    pub rotation: [f64; 3],
+    pub orientation: [f64; 4],
     pub velocity: [f64; 3],
     pub health: Value,
     pub stamina: Value,
@@ -78,7 +78,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_gameplay(p: *const Provider) {
-    let admitted = if !p.is_null() && unsafe { (*p).abi } == 1 {
+    let admitted = if !p.is_null() && unsafe { (*p).abi } == 2 {
         p.cast_mut()
     } else {
         std::ptr::null_mut()
@@ -348,6 +348,22 @@ fn native_value(v: gp::NativeScalar) -> Value {
         value: v.value(),
     }
 }
+fn initial_transform(state: &gp::State, scale: [f64; 3]) -> Transform {
+    Transform {
+        p: state.position,
+        q: state.orientation,
+        scale,
+    }
+}
+fn native_state(state: &gp::State) -> NativeState {
+    NativeState {
+        position: state.position,
+        orientation: state.orientation,
+        velocity: state.velocity,
+        health: native_value(state.health),
+        stamina: native_value(state.stamina),
+    }
+}
 unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Result<(), String> {
     unsafe {
         lua_createtable(L, 0, 13);
@@ -411,6 +427,7 @@ unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Resu
             array(L, r, "axes", v.axes.map(f64::from));
             array(L, r, "position", v.position);
             array(L, r, "rotation", v.rotation);
+            array(L, r, "orientation", v.orientation);
             array(L, r, "velocity", v.velocity);
             for (name, value) in [("health", v.health), ("stamina", v.stamina)] {
                 lua_createtable(L, 0, 2);
@@ -568,20 +585,8 @@ impl Native {
                     len: (class.len() - 1) as u32,
                     pad: 0,
                 };
-                let rad = state.rotation.map(f64::to_radians);
-                let (sp, cp) = (rad[0] * 0.5).sin_cos();
-                let (sy, cy) = (rad[1] * 0.5).sin_cos();
-                let (sr, cr) = (rad[2] * 0.5).sin_cos();
-                let transform = Transform {
-                    p: state.position,
-                    q: [
-                        cr * sp * sy - sr * cp * cy,
-                        -cr * sp * cy - sr * cp * sy,
-                        cr * cp * sy - sr * sp * cy,
-                        cr * cp * cy + sr * sp * sy,
-                    ],
-                    scale: descriptor.recipe.construction.actor_scale,
-                };
+                let transform =
+                    initial_transform(state, descriptor.recipe.construction.actor_scale);
                 let mut handle = 0;
                 let mut pawn = Object::default();
                 let mut r = ResultInfo::default();
@@ -746,13 +751,7 @@ impl Native {
                     if !context.valid() {
                         return Err("gameplay apply admission changed".into());
                     }
-                    let state = NativeState {
-                        position: row.position,
-                        rotation: row.rotation,
-                        velocity: row.velocity,
-                        health: native_value(row.health),
-                        stamina: native_value(row.stamina),
-                    };
+                    let state = native_state(row);
                     let mut proof = Proof::default();
                     let mut r = ResultInfo::default();
                     if (p.apply)(pawn.handle, &state, &context.ffi(), &mut proof, &mut r) != 1
@@ -1059,6 +1058,12 @@ mod tests {
                     axes: [1., 0., 0., 0., 0., 0., 0., 0.],
                     position: [1.0000000000000002, 20., 30.],
                     rotation: [0., 90., 0.],
+                    orientation: [
+                        0.,
+                        0.,
+                        f64::from_bits(0x3fe6_a09e_667f_3bcc),
+                        f64::from_bits(0x3fe6_a09e_667f_3bcd),
+                    ],
                     velocity: [1., 2., 3.],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
@@ -1208,12 +1213,56 @@ mod tests {
     #[test]
     fn private_provider_layout() {
         assert_eq!(std::mem::size_of::<Value>(), 16);
-        assert_eq!(std::mem::size_of::<NativeState>(), 104);
+        assert_eq!(std::mem::size_of::<NativeState>(), 112);
+        assert_eq!(std::mem::offset_of!(NativeState, orientation), 24);
+        assert_eq!(std::mem::offset_of!(NativeState, velocity), 56);
         assert_eq!(std::mem::size_of::<Proof>(), 112);
         assert_eq!(std::mem::size_of::<Provider>(), 72);
         assert_eq!(std::mem::offset_of!(Provider, complete), 64);
         assert_eq!(std::mem::offset_of!(Provider, clear), 48);
         assert_eq!(std::mem::offset_of!(Provider, discard), 56);
+    }
+    #[test]
+    fn native_quaternion_and_original_scale_reach_spawn_and_apply_without_euler_conversion() {
+        let scene = scene_fixture();
+        let mut row = scene.result.entities[0].clone();
+        row.orientation[0] = -0.;
+        let transform = initial_transform(&row, [0.75, 1.5, 2.]);
+        let state = native_state(&row);
+        assert_eq!(
+            transform.q.map(f64::to_bits),
+            row.orientation.map(f64::to_bits)
+        );
+        assert_eq!(
+            state.orientation.map(f64::to_bits),
+            row.orientation.map(f64::to_bits)
+        );
+        assert_eq!(transform.scale, [0.75, 1.5, 2.]);
+        assert_eq!(
+            state.position.map(f64::to_bits),
+            row.position.map(f64::to_bits)
+        );
+        assert_eq!(
+            state.velocity.map(f64::to_bits),
+            row.velocity.map(f64::to_bits)
+        );
+    }
+    #[test]
+    fn old_gameplay_abi_is_refused_without_reading_the_changed_state_contract() {
+        #[repr(C, align(8))]
+        struct OldHeader {
+            abi: u32,
+            pad: u32,
+        }
+        let old = OldHeader { abi: 1, pad: 0 };
+        unsafe {
+            hsmp_native_set_gameplay((&old as *const OldHeader).cast());
+        }
+        assert!(PROVIDER.load(Ordering::Acquire).is_null());
+        unsafe {
+            hsmp_native_set_gameplay(std::ptr::null());
+        }
+        assert!(PROVIDER.load(Ordering::Acquire).is_null());
     }
     #[test]
     fn exact_scalar_type_is_preserved() {
