@@ -1597,6 +1597,8 @@ int32_t gameplay_weapons(const uint64_t*,uint32_t,const HsmpViewGuard*,uint32_t*
 void gameplay_weapons_final(const uint64_t*,uint32_t);
 void gameplay_weapons_guard();
 void gameplay_weapons_discard(uint64_t);
+void gameplay_weapons_config_discard(uint64_t);
+void gameplay_weapons_prepare(uint64_t,HsmpViewResult*);
 void gameplay_weapons_reset();
 #include "native_gameplay_pawn_impl.h"
 #include "native_gameplay_weapons_impl.h"

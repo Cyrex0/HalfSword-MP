@@ -898,6 +898,7 @@ int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
     gameplay_weapons_discard(handle);
+    gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(pawn&&entry.stage==1,"native gameplay construction stage");gameplay_local(entry,result);
         Function finish(L"/Script/Engine.GameplayStatics:FinishSpawningActor");finish.object(L"Actor",entry.pawn);
@@ -910,6 +911,7 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
     gameplay_weapons_discard(handle);
+    gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
@@ -920,9 +922,12 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         // unacknowledged damage. Accepted movement is replayed explicitly.
         if(entry.own){Function move(L"/Script/Engine.Controller:ResetIgnoreMoveInput");move.call(entry.controller,result);
             Function look(L"/Script/Engine.Controller:ResetIgnoreLookInput");look.call(entry.controller,result);}
-        entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);lookup_finish();gameplay_pure(entry);
+        entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);
+        // Discover immutable gear metadata during generation-bound preparation.
+        // Every application still captures and verifies its own fresh values.
+        gameplay_weapons_prepare(handle,result);lookup_finish();gameplay_pure(entry);
         if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
-    }catch(const std::exception& error){failure(result,error.what());return -1;}
+    }catch(const std::exception& error){gameplay_weapons_config_discard(handle);failure(result,error.what());return -1;}
 }
 void gameplay_value(Obj pawn,const wchar_t* field,const HsmpGameplayValue& expected){
     require(expected.pad==0&&std::isfinite(expected.value)&&(expected.kind==1||expected.kind==2),"native gameplay exact vital type unavailable");
@@ -1095,6 +1100,7 @@ int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
     gameplay_weapons_discard(handle);
+    gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);
         // Teardown starts only after the active construction/apply call unwinds.
         gameplay_local(entry,result);
@@ -1105,7 +1111,7 @@ int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult
         destroy_actor(entry.world,entry.pawn);gameplay_pawns.erase(handle);result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_boundary_invalidate();gameplay_weapons_discard(handle);gameplay_pawns.erase(handle);}
+void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_boundary_invalidate();gameplay_weapons_discard(handle);gameplay_weapons_config_discard(handle);gameplay_pawns.erase(handle);}
 int32_t gameplay_complete(const uint64_t* handles,uint32_t count,uint32_t require_weapons,const HsmpViewGuard* guard,HsmpGameplayProof* proofs,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();require(handles&&proofs&&count>0&&count<=32&&count==gameplay_pawns.size()&&require_weapons<=1,"native gameplay complete roster bound");

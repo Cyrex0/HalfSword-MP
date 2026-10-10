@@ -203,8 +203,52 @@ void cold_path_cases(){
     owner.gi=nullptr;rejects([&](){weapon_roster_links(links);},"original actor owner mutation refuses");owner.gi=&gi;
     class_b.gi=&gi;rejects([&](){weapon_roster_links(links);},"original owning world mutation refuses");class_b.gi=&world;
     owner.payload[0xf8]=1;rejects([&](){weapon_roster_links(links);},"last passport field Tier mutation refuses");owner.payload[0xf8]=0;
+    // Configuration has no applied-result values. Each application acquires
+    // its own fresh values/class leaves before any conversion callback.
+    auto current_schema=schema;current_schema.path=weapon_path_pure(&owner);WeaponBoundaryPlan current_plan;current_plan.schema(current_schema);
+    links.schema=current_schema;links.vector=current_schema;links.color=current_schema;links.class_path=class_path;links.pawns[0].own=1;gameplay_entry(row.handle).own=1;
+    HsmpGameplayWeaponPassport config_output{};config_output.pawn_index=0;config_output.name.length=1;config_output.name.data[0]='x';links.output.push_back(config_output);
+    links.actors[0].values.tier=93;links.actors[0].classes[0]=paths[0];const auto config=weapon_configuration_copy(links);
+    const uint64_t config_handles[]{row.handle};auto warm=weapon_configuration_snapshot(config,config_handles,1);
+    check(warm.require_applied&&warm.actors[0].bound&&!warm.actors[0].values_bound&&warm.actors[0].values.tier==0&&warm.actors[0].classes[0].pinned.empty(),"prepared metadata excludes old values and class-leaf witnesses");
+    check(warm.output[0].name.length==0&&!warm.plan,"prepared metadata excludes converted strings and prior operation plan");
+    owner.payload[0xf8]=37;const uint64_t live_class=reinterpret_cast<uint64_t>(&class_a);std::memcpy(owner.payload.data(),&live_class,8);
+    current_plan.validate();weapon_roster_links(warm);weapon_capture_value_rows(warm);current_plan.validate();
+    check(warm.actors[0].values_bound&&warm.actors[0].values.tier==37&&warm.actors[0].values.classes[0]==live_class&&warm.actors[0].classes[0].pinned.front().address==live_class,"warm row captures current all25 values and original live class rather than bootstrap values");
+    owner.payload[0xf8]=38;rejects([&](){weapon_roster_links(warm);},"later callback mutation refuses the new per-result passport");
+    auto next=weapon_configuration_snapshot(config,config_handles,1);weapon_roster_links(next);weapon_capture_value_rows(next);
+    check(next.actors[0].values.tier==38&&next.actors[0].classes[0].pinned.front().address==live_class,"next result recaptures changed values without metadata rebinding or old-value acceptance");
+    const auto old_world=gameplay_entry(row.handle).world;gameplay_entry(row.handle).world={old_world.weak,old_world.address+8};rejects([&](){weapon_roster_links(next);},"prepared binding rejects a different original world");gameplay_entry(row.handle).world=old_world;
+    owner.name^=1;rejects([&](){current_plan.validate();},"retained metadata is freshly checked after configuration reuse");owner.name^=1;
+    gameplay_entry(row.handle).applied.reset();rejects([&](){weapon_roster_links(next);},"prepared metadata cannot substitute an applied native result");
+    links.require_applied=false;links.actors[0].values_bound=false;weapon_roster_links(links);check(true,"bootstrap-only no-applied mode qualifies original links without publishing a result");
+    owner.payload.fill(0);
     gameplay_pawns.erase(row.handle);owner.outer=nullptr;owner.gi=nullptr;gi.outer=nullptr;class_b.gi=nullptr;
     cold_poisoned_field=nullptr;active_lookup=nullptr;vt=nullptr;object_name=nullptr;retirement_flags=nullptr;source_outer=nullptr;source_package_name=nullptr;weapon_api={};identities.clear();cold_objects.clear();
+}
+void configuration_lifecycle_cases(){
+    const auto previous_api=weapon_api;weapon_api={};LookupState operation;active_lookup=&operation;
+    GameplayPawn remote;remote.stage=3;remote.world={1,100};remote.controller={2,200};remote.pawn={3,300};gameplay_pawns.emplace(10,remote);
+    gameplay_weapon_configuration.reset();gameplay_weapon_snapshot.reset();
+    gameplay_weapons_prepare(10,nullptr);
+    check(!gameplay_weapon_configuration&&!gameplay_weapon_snapshot&&!weapon_api.module,"remote-first finish defers before metadata discovery or publishing configuration/result proof");
+    GameplayPawn owned=remote;owned.own=1;owned.stage=2;owned.pawn={4,400};gameplay_pawns.emplace(20,owned);
+    check(!weapon_prepare_roster(gameplay_entry(10)),"unfinished owned row keeps preparation deferred");gameplay_entry(20).stage=3;
+    check(weapon_prepare_roster(gameplay_entry(10)),"complete same-original roster permits explicit bootstrap preparation");
+    WeaponConfiguration config;WeaponPawnSnapshot a;a.handle=10;a.world=remote.world;a.controller=remote.controller;a.pawn=remote.pawn;
+    auto b=a;b.handle=20;b.pawn=owned.pawn;b.own=1;config.pawns={a,b};const uint64_t handles[]{10,20},reversed[]{20,10};
+    const auto copied=weapon_configuration_snapshot(config,handles,2);check(copied.pawns[0].handle==10&&copied.pawns[1].handle==20&&copied.require_applied,"prepared original ordered handles retained for each new operation");
+    rejects([&](){weapon_configuration_snapshot(config,reversed,2);},"reordered prepared handles refuse rather than silently rebind");
+    rejects([&](){weapon_configuration_snapshot(config,handles,1);},"incomplete prepared roster refuses");
+    gameplay_entry(20).controller.address+=8;rejects([&](){weapon_prepare_roster(gameplay_entry(10));},"different controller cannot seed prepared metadata");gameplay_entry(20).controller=remote.controller;
+    gameplay_entry(10).own=1;rejects([&](){weapon_prepare_roster(gameplay_entry(10));},"ambiguous owned bootstrap refuses before discovery");gameplay_entry(10).own=0;
+    gameplay_weapon_configuration=std::make_shared<const WeaponConfiguration>(config);auto result=std::make_shared<WeaponRosterSnapshot>();result->pawns=config.pawns;gameplay_weapon_snapshot=result;
+    const auto retained=gameplay_weapon_configuration;gameplay_weapons_discard(10);
+    check(!gameplay_weapon_snapshot&&gameplay_weapon_configuration==retained,"per-apply result discard preserves original metadata only");
+    gameplay_weapons_config_discard(99);check(gameplay_weapon_configuration==retained,"unrelated handle cannot replace original metadata profile");
+    gameplay_weapons_config_discard(20);check(!gameplay_weapon_configuration&&retained->pawns.size()==2,"explicit lifecycle invalidation drops publication but keeps in-flight copied ownership alive");
+    gameplay_weapon_configuration=retained;gameplay_weapons_reset();check(!gameplay_weapon_configuration&&!gameplay_weapon_snapshot&&!weapon_api.module,"begin/reset invalidates both profile and per-result proof");
+    gameplay_pawns.clear();active_lookup=nullptr;weapon_api=previous_api;
 }
 struct TimingRow {uint32_t complete{},attempt{},phase{};uint64_t us{};std::string label;};
 std::vector<TimingRow> weapon_timing_rows;bool weapon_timing_unsafe{};
@@ -231,5 +275,5 @@ void timing_cases(){
     check(weapon_timing_rows.size()==emitted,"excluded/disabled batches emit no rows");create_logger.store(previous);weapon_batch_attempts=0;weapon_batch_timing_active=false;
 }
 }
-int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
+int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();configuration_lifecycle_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
     std::cout<<"native_gameplay_weapons: "<<checks<<" checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<"native_gameplay_weapons: "<<e.what()<<'\n';return 1;}}

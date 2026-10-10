@@ -2,6 +2,47 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Next candidate prepares native weapon metadata inside the existing generation-
+bound final-finish operation before its unchanged lookup/pawn/UI pure tail.
+Explicit construct/finish/clear/discard invalidate configuration; begin/reset
+already resets it, and a later finish refusal invalidates preparation. Application
+still discards every old result snapshot but retains copied configuration only.
+Separate WeaponActorMetadata/WeaponConfiguration types exclude all WeaponValues,
+class-leaf values, strings, receipts, readiness and result plans. Warm calls require
+the exact original ordered handle set/world/controller/pawns/own roles/alias
+topology, freshly qualify all metadata/owner/world links, and capture all25 current
+values plus class-leaf witnesses in a callback-free block before conversion.
+Every existing guard and final full-snapshot proof remains; failed qualifiers
+never rebuild or adopt replacements. The operation holds its own shared lifetime
+and copied plan, and warm require_applied=true cannot inherit bootstrap's false.
+Remote-first/no-owned or unfinished staged rosters defer discovery without
+publishing configuration or readiness; ambiguous ownership still refuses.
+Strict production/native2187/weapons144 PASS; independent implementation and
+lifecycle reviews CLOSED. Full G0/exact deployment and actual runtime benefit
+remain pending. ABI4, original65s startup and250ms receipt remain unchanged.
+
+Actuald0288abc full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Standard180715-b266d9 FAILS original65s startup/250ms receipt.
+Both clients finish/apply; all sixteen bounded batches still expire in actors,
+conversion/final0. C1 actor/total medians136726.5/175615us; C2
+115290.5/158515us. This does not establish a performance improvement over the
+previous failed baseline. READY Lua timing now identifies weapon_batch refusal
+before armor/gear: first samples native_apply roughly52-86ms plus weapon_batch
+145-194ms, with original entry/returned ages retained. No LIVE/inputs/model/HUD
+pixels. No startupheap recurrence. SecondaryplacementPASS; independent cleanup
+fourabsent/save20unchanged/nodumps/children; summary and bounded rows saved.
+
+Next strategy separates immutable native weapon metadata preparation from fresh
+per-application values. Existing gameplay_finish is generation/world/controller
+guarded bootstrap (Rust Context.application=false), so it can prepare original
+typed schemas/properties/functions/actor paths before receipt-bound application.
+The application must freshly requalify every retained original metadata/path/code
+expectation and capture/read back all aliases/ownership/world/passport values.
+No admitted/result/passport cache, renewed lease, false readiness or silent
+replacement adoption. Explicit roster/stage/world/profile lifecycle changes
+invalidate preparation; metadata refusal fails the original profile. Design,
+implementation and actual verification remain pending. Continue, no release.
+
 Actual64ba696a full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
 deployed. Startup173042-408bec FAILS: C2 exits0xC0000374 at about12s, before
 native readiness, state events or gameplay APIs. Its last native startup record

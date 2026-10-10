@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Prepare original weapon metadata during spawning, then freshly verify current
+  gear values during gameplay without repeating cold discovery every update.
 - Consolidate agreeing shared weapon metadata checks within each native guard,
   retaining fresh validation of all original actors, ownership, gear and fields.
 - Measure complete gameplay verification while clients are still preparing,
