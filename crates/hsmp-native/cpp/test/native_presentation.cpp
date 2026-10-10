@@ -1211,11 +1211,12 @@ alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_rende
 std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{},pose_allocate_mesh_serial{};uint32_t pose_asset_reads{},pose_mesh_serial{};
 uint32_t mesh_mutation{},mesh_path_finds{};bool mesh_mutation_done{},mesh_lookup_serial{};
 bool mesh_boundary_counting{};uint32_t mesh_boundary_resolves{},mesh_boundary_mutate_at{};
+std::vector<uint64_t> mesh_boundary_order;
 uint32_t mesh_boundary_garbage_names{};
 const uint64_t* mesh_boundary_name(const void* p){if((*lifetime_flags(p)&0x40000000u)!=0)++mesh_boundary_garbage_names;return lifetime_name(p);}
 uint64_t pose_weak(void* p){return lifetime_weak(p)|(p==&vertex_mesh?static_cast<uint64_t>(pose_mesh_serial)<<32:0);}
 void* pose_resolve(uint64_t id){const auto index=static_cast<uint32_t>(id),serial=static_cast<uint32_t>(id>>32);auto* p=lifetime_resolve(index);
-    if(mesh_boundary_counting&&++mesh_boundary_resolves==mesh_boundary_mutate_at)path_package.name^=1;
+    if(mesh_boundary_counting){mesh_boundary_order.push_back(id);if(++mesh_boundary_resolves==mesh_boundary_mutate_at)path_package.name^=1;}
     return serial&&(p!=&vertex_mesh||serial!=pose_mesh_serial)?nullptr:p;}
 void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
     if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
@@ -1260,7 +1261,7 @@ void pose_reset(HsmpReflect& reflect){
     reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;reflect.weak=pose_weak;reflect.resolve=pose_resolve;source_outer=lifetime_outer;
     pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
     pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=pose_allocate_mesh_serial=mesh_lookup_serial=false;pose_asset_reads=pose_mesh_serial=mesh_mutation=mesh_path_finds=0;mesh_mutation_done=false;
-    mesh_boundary_counting=false;mesh_boundary_resolves=mesh_boundary_mutate_at=0;
+    mesh_boundary_counting=false;mesh_boundary_resolves=mesh_boundary_mutate_at=0;mesh_boundary_order.clear();
     vertex_mesh.name=814;vertex_mesh.cls=&vertex_mesh_class;vertex_mesh.outer=&path_package;source_package_name=&path_package_name;path_package_name=700;
     path_package={127,&meta};lifetime_objects.push_back(&path_package);
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
@@ -1311,7 +1312,7 @@ void pose_checks(HsmpReflect& reflect){
     pose_reset(reflect);admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);pose_allocate_mesh_serial=true;
     mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);Mirror witnessed{keep(&old_world),keep(&actor),{}};Part retained{};retained.mesh=admitted;witnessed.parts.push_back(retained);
     {MeshWatch watch({&witnessed});vertex_mesh.name^=1;rejects([&]{check_guard();},"later component callback rechecks the earlier retained mesh path before continuing");vertex_mesh.name^=1;}
-    mesh_boundary_counting=true;mesh_boundary_resolves=0;mesh_bindings_final({&admitted});const auto unique_boundary_reads=mesh_boundary_resolves;
+    mesh_boundary_counting=true;mesh_boundary_resolves=0;mesh_boundary_order.clear();mesh_bindings_final({&admitted});const auto unique_boundary_reads=mesh_boundary_resolves;const auto original_boundary_order=mesh_boundary_order;
     mesh_boundary_resolves=0;mesh_bindings_final({&admitted,&admitted,&admitted});
     check(mesh_boundary_resolves==unique_boundary_reads+6,"shared original path/class reads occur once per fresh pass while every binding retains owner/Level/pin checks");
     mesh_boundary_resolves=0;mesh_bindings_final({&admitted});
@@ -1332,7 +1333,11 @@ void pose_checks(HsmpReflect& reflect){
     object_name=lifetime_name;
     {MeshWatch immutable({&witnessed},nullptr,true);const auto plan=immutable.plan;
         check(plan&&plan->pointers.size()==1&&plan->pointers[0]!=&*witnessed.parts[0].mesh,"immutable operation plan owns copied original binding metadata");
-        mesh_boundary_counting=true;mesh_boundary_resolves=0;check_guard();const auto first_reads=mesh_boundary_resolves;
+        check(plan->classes.size()==plan->boundary.classes.size()&&plan->nodes.size()==plan->boundary.nodes.size()&&
+            std::is_sorted(plan->classes.begin(),plan->classes.end(),[](const auto& a,const auto& b){return a.first<b.first;})&&
+            std::is_sorted(plan->nodes.begin(),plan->nodes.end(),[](const auto& a,const auto& b){return a.first<b.first;}),"contiguous immutable class/node arrays preserve complete original map order");
+        mesh_boundary_counting=true;mesh_boundary_resolves=0;mesh_boundary_order.clear();check_guard();const auto first_reads=mesh_boundary_resolves;
+        check(first_reads==unique_boundary_reads&&mesh_boundary_order==original_boundary_order,"contiguous plan performs exactly the original class then node/native link resolve sequence twice");
         mesh_boundary_resolves=0;check_guard();check(mesh_boundary_resolves==first_reads&&immutable.plan==plan,"compiled expectations are reused while every guard freshly rereads all witnesses");mesh_boundary_counting=false;
         vertex_mesh.name^=1;rejects([&]{check_guard();},"native metadata mutation after a successful compiled-plan check is refused on the next guard");vertex_mesh.name^=1;
         {MeshWatch nested({&witnessed},nullptr,true);check(nested.plan&&nested.plan!=plan&&nested.plan->pointers.size()==2,"nested immutable operation compiles agreeing original plans together");check_guard();}

@@ -1,5 +1,28 @@
 # Native full-scene encoding checkpoint
 
+## Actual1cc1b96f: accurate timing confirms fresh mesh proof dominates
+
+Normal020203-b03f9c/fullG0/dev/all394, source08be7971-abed-49be-9e50-
+bca90fdf292d/auth18848/c32640/2260. Warm private nanoseconds accumulate and
+convert once. c1 profiled apply181ms/mesh133ms/guard149ms; obj_prop2.35ms,
+getidentity7.16ms/cachedFunction6.63ms. Finish96ms/mesh78/guard84ms. Extra
+metadata/schema/copy costs do not explain most delay; no speculative schema cache.
+c1laterLIVE warm424–431ms, c2LIVE542–621ms (direct totals); allpostapplystale.
+Originalguardcounts185143/74215 stay. Standardfalse/activeboth0/ownedviewunproved.
+CleanupPASS4absent/save20same/nodumps/unobservedchildren/bothsecondary. Next
+concrete fresh MeshBoundary.validate cost reduction supported by original proofs;
+no successfulvalidation reuse, pinrefresh or looser receipt.
+
+Candidate compiles map-based strict agreeing merges, then copies full original
+class/node entries into contiguous arrays in exactly map order. Both immutable
+arrays and mutable map fallback use the SAME native validation body/order,
+two fresh passes and all original per-binding link/RF/pin checks. No native
+field pointer or extra assumption; two CPP files/no ABI/receipt/lifetime change.
+Fixture compares complete array ordering and exact native resolve sequences/
+counts with the old map path. Actual timing pending; no assumed vector gain.
+Strict provider/fixture1,764 checks pass; independent reviewclosed. Complete
+ordered rows and native resolve sequence/count equality are explicitly asserted.
+
 ## Actual65946a48: hot-path microsecond truncation invalidates internal attribution
 
 Normal015139-f6bbe0/fullG0/dev/all394, source18d63492-ec12-4fff-8e52-

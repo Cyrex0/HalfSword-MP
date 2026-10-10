@@ -1276,14 +1276,14 @@ struct MeshBoundary {
         if(!class_inserted){require(cls->second.second==node.class_name,"native mesh shared original class disagreement");
             cls->second.first.weak=lookup_merge_weak(cls->second.first.weak,node.class_weak,node.class_address);}
     }
-    void validate()const{
+    template<class ClassRows,class NodeRows>void validate_rows(const ClassRows& class_rows,const NodeRows& node_rows)const{
         require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native mesh shared metadata unavailable");
         require(!package||*source_package_name==*package,"native mesh original package discriminator changed");
-        for(const auto& [address,saved]:classes){void* p=vt->resolve(saved.first.weak);
+        for(const auto& [address,saved]:class_rows){void* p=vt->resolve(saved.first.weak);
             require(reinterpret_cast<uint64_t>(p)==address,"native mesh shared original class slot changed");
             const auto* flags=retirement_flags(p);require(flags&&(*flags&0x40000000u)==0,"native mesh shared original class garbage");
             const auto* n=object_name(p);require(n&&*n==saved.second,"native mesh shared original class changed");}
-        for(const auto& [address,saved]:nodes){const auto& node=saved.node;void* p=vt->resolve(node.weak);
+        for(const auto& [address,saved]:node_rows){const auto& node=saved.node;void* p=vt->resolve(node.weak);
             require(reinterpret_cast<uint64_t>(p)==address,"native mesh shared original object slot changed");
             const auto* flags=retirement_flags(p);require(flags&&(*flags&0x40000000u)==0,"native mesh shared original object garbage");
             const auto* n=object_name(p);require(n&&*n==node.name&&vt->class_of(p)==reinterpret_cast<void*>(node.class_address),"native mesh shared original FName/class changed");
@@ -1291,6 +1291,7 @@ struct MeshBoundary {
         }
         require(!package||*source_package_name==*package,"native mesh original package discriminator changed during walk");
     }
+    void validate()const{validate_rows(classes,nodes);}
 };
 MeshBoundary mesh_boundary_build(const std::vector<const MeshBinding*>& bindings){
     require(bindings.size()<=32*64,"native mesh shared binding bound");MeshBoundary boundary;
@@ -1303,18 +1304,21 @@ MeshBoundary mesh_boundary_build(const std::vector<const MeshBinding*>& bindings
     }
     return boundary;
 }
-void mesh_boundary_final(const MeshBoundary& boundary,const std::vector<const MeshBinding*>& bindings){
-    boundary.validate();
+template<class ClassRows,class NodeRows>void mesh_boundary_final_rows(const MeshBoundary& boundary,const std::vector<const MeshBinding*>& bindings,const ClassRows& classes,const NodeRows& nodes){
+    boundary.validate_rows(classes,nodes);
     for(const auto* b:bindings){
-        const auto* owner=vt->resolve(b->owner_node.weak);const auto* level=vt->resolve(b->level_node.weak);
-        require(reinterpret_cast<uint64_t>(owner)==b->owner_node.address&&reinterpret_cast<uint64_t>(level)==b->level_node.address,"native mesh original owner/level slot changed");
-        const auto* outer=source_outer(owner);require(outer&&*outer==level,"native mesh original owner level changed");
-        void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+0xc0,8);
+        const auto* owner=vt->resolve(b->owner_node.weak);const auto* original_level=vt->resolve(b->level_node.weak);
+        require(reinterpret_cast<uint64_t>(owner)==b->owner_node.address&&reinterpret_cast<uint64_t>(original_level)==b->level_node.address,"native mesh original owner/level slot changed");
+        const auto* outer=source_outer(owner);require(outer&&*outer==original_level,"native mesh original owner level changed");
+        void* world{};std::memcpy(&world,static_cast<const uint8_t*>(original_level)+0xc0,8);
         require(reinterpret_cast<uint64_t>(world)==b->world.address,"native mesh original world changed");
         const auto* p=vt->resolve(b->pinned.weak);require(reinterpret_cast<uint64_t>(p)==b->pinned.address,"native mesh original pinned slot changed");
         const auto* flags=retirement_flags(p);require(flags&&*flags==b->flags&&(*flags&0x40u)==0,"native mesh original flags/runtime profile changed");
     }
-    boundary.validate();
+    boundary.validate_rows(classes,nodes);
+}
+void mesh_boundary_final(const MeshBoundary& boundary,const std::vector<const MeshBinding*>& bindings){
+    mesh_boundary_final_rows(boundary,bindings,boundary.classes,boundary.nodes);
 }
 void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
     const auto boundary=mesh_boundary_build(bindings);mesh_boundary_final(boundary,bindings);
@@ -1323,10 +1327,14 @@ struct MeshPlan {
     std::vector<MeshBinding> bindings;
     std::vector<const MeshBinding*> pointers;
     MeshBoundary boundary;
+    std::vector<std::pair<uint64_t,std::pair<Obj,uint64_t>>> classes;
+    std::vector<std::pair<uint64_t,MeshBoundaryNode>> nodes;
     explicit MeshPlan(const std::vector<const MeshBinding*>& originals){
         bindings.reserve(originals.size());for(const auto* b:originals){require(b!=nullptr,"native mesh plan original missing");bindings.push_back(*b);}
         pointers.reserve(bindings.size());for(const auto& b:bindings)pointers.push_back(&b);
         boundary=mesh_boundary_build(pointers);
+        classes.reserve(boundary.classes.size());for(const auto& [address,value]:boundary.classes)classes.emplace_back(address,value);
+        nodes.reserve(boundary.nodes.size());for(const auto& [address,value]:boundary.nodes)nodes.emplace_back(address,value);
     }
     MeshPlan(const MeshPlan&)=delete;
     MeshPlan& operator=(const MeshPlan&)=delete;
@@ -1338,7 +1346,7 @@ std::shared_ptr<const MeshPlan> mesh_watch_plan(const MeshWatch* watch){
     if(originals.empty())return {};
     return std::make_shared<MeshPlan>(originals);
 }
-void mesh_plan_final(const MeshPlan& plan){mesh_boundary_final(plan.boundary,plan.pointers);}
+void mesh_plan_final(const MeshPlan& plan){mesh_boundary_final_rows(plan.boundary,plan.pointers,plan.classes,plan.nodes);}
 bool mesh_serial_assignment(Obj original,Obj current){
     return original.weak&&current.weak&&(original.weak>>32)==0&&static_cast<int32_t>(current.weak>>32)>0&&
         original.address==current.address&&static_cast<uint32_t>(original.weak)==static_cast<uint32_t>(current.weak);

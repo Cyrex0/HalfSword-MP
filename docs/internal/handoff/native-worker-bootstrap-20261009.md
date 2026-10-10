@@ -1,5 +1,19 @@
 # Native authority bootstrap checkpoint
 
+## Actual1cc1b96f: accurate fresh-mesh cost is dominant
+
+Normal020203-b03f9c/fullG0/dev/all394/auth18848/c32640/2260: c1apply181ms/
+mesh133guard149; property2.35/get7.16/cachedFunction6.63ms. Finish96/mesh78ms.
+Nanoseconds retainalltinycontributions. LIVEwarmc1424–431/c2542–621ms,
+allpostapplystale/standardfalse/activeboth0/ownedviewunproved. Countsunchanged;
+cleanupPASS4absent20savehashsame/nodumps/secondary. Targetactualfreshmeshproof,
+no speculative metadata cache or freshness change.
+Candidate contiguous ordered immutableclass/noderows preserve mapconflict build,
+exactnativevalidationbody/order/twopasses/alllinks. Mutablemapfallback unchanged;
+twoCPPfiles/noABI. Exactresolveorder/countfixture;actualtimingpending.
+Strictprovider/fixture1,764pass/reviewclosed; exactcompleteorderedrows andnative
+resolvesequence/countassertions retained. Actualwholewarmresultnext.
+
 ## Actual65946a48: fix timing precision before interpreting hot paths
 
 Normal015139-f6bbe0/auth44736/c27192/18672/fullG0/dev/all394: allwarmstale,

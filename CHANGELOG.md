@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Store compiled warm mesh expectations in contiguous ordered arrays while
+  preserving the same native validation reads, order and original conflict checks.
 - Accumulate warm diagnostic timings at nanosecond precision and convert once
   when reporting, retaining submicrosecond work across repeated calls.
 - Extend the bounded warm profile with actual property-metadata lookup,
