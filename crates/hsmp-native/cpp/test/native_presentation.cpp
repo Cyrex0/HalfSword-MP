@@ -1433,15 +1433,16 @@ void gameplay_current_checks(HsmpReflect& reflect){
     entry.pawn_path=gameplay_path(entry.pawn);
     GameplayCurrent profile;profile.controller_level=entry.level;profile.level_world=entry.level_world;profile.level_path=gameplay_path(entry.level);
     profile.get_level_path=gameplay_path(keep(&get_level_fn));profile.local_path=gameplay_path(keep(&owner_fn));
-    profile.local.offset=0x6bc;profile.local.size=1;profile.local.bool_mask=0xff;profile.vtable=reinterpret_cast<uint64_t>(table.data());entry.current=profile;
+    profile.local.offset=0x6bc;profile.local.size=1;profile.local.bool_mask=1;profile.vtable=reinterpret_cast<uint64_t>(table.data());entry.current=profile;
     reported_schema=profile.local;
     GameplayCurrentObservation observed;
     check(gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_HOT&&level_calls==0,"qualified positive current branch reports its actual choice without native PE");
     *local=0;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_ZERO,"zero local byte reports native fallback rather than cached positive result");
-    *local=2;check(gameplay_current_positive(entry,true,base),"full native bool byte positive branch preserves non-one true values");
+    *local=2;check(gameplay_current_positive(entry,true,base),"native byte2 with adapter ByteMask1 remains positive without substituting masked FieldMask semantics");
     check(!gameplay_current_positive(entry,false,base,&observed)&&observed.reason==GP_CURRENT_CODE,"unsupported native code reports unchanged legacy admission");
     table[0x7a8/8]++;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_TARGET,"unsupported current virtual target reports native fallback");table[0x7a8/8]--;
-    entry.current->local.bool_mask=1;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_SCHEMA,"nonmatching native bool layout reports legacy admission");entry.current->local.bool_mask=0xff;
+    for(const uint8_t mask:{uint8_t{0},uint8_t{2},uint8_t{0xff}}){entry.current->local.bool_mask=mask;
+        check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_SCHEMA,"unobserved ByteMask layout retains strict legacy admission");}entry.current->local.bool_mask=1;
     entry.current_binding.reason=GP_CURRENT_SCHEMA;auto bound=std::move(entry.current);entry.current.reset();
     check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_SCHEMA,"cold profile absence preserves the original failed Bool schema stage");entry.current=std::move(bound);
     level.property=&new_world;rejects([&]{gameplay_current_positive(entry,true,base);},"fresh original level world change refuses hot current");level.property=&old_world;
@@ -1468,7 +1469,7 @@ void gameplay_current_checks(HsmpReflect& reflect){
         gameplay_current_records[2].label.find("route=hot reason=positive_branch")!=std::string::npos,
         "copied report distinguishes actual success route and refusal without object queries");
     check(gameplay_current_records[1].operations==3&&gameplay_current_records[2].operations==0&&
-        gameplay_current_records[1].label.find("offset=1724 size=1 byte=0 mask=255")!=std::string::npos,"current diagnostic preserves existing PE count and original schema scalars");
+        gameplay_current_records[1].label.find("offset=1724 size=1 byte=0 mask=1")!=std::string::npos,"current diagnostic preserves existing PE count and actual adapter ByteMask1 schema");
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }

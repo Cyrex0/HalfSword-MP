@@ -2,6 +2,21 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual21d43cac fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
+standardGameplay061606-628efb first8 BOTH current calls legacy/PE3/bool_schema,
+found1/type1/offset1724(6BC)/size1/byte0/mask1. Actual source adapter
+ue4ss_reflect.cpp146 exposes bool_byte_mask, not FieldMask; priorFF qualification
+was wrong. Native pinned leaf remains rawbyte!=0. Correct strict qualification
+to actual ByteMask1 with all code/type/offset/size/byte/vslot/original worlds kept.
+Client1 apply23488→23494ms true, fullgear stale24309 (+815ms). No ready/input0.
+Early original windows secondaryPASS. CleanupPASS/four absent/save20/nodumps.
+Evidence native_operator_summary retains16 original-client branch rows. No more
+speculative optimization until the corrected route's actual use/timing is proved.
+Exact two-file ByteMask correction frozen/review CLOSED: cold/hot require1;
+native wholebyte!=0 remains (byte2 true). Unknown masks0/2/FF and zero byte keep
+legacy fallback. Strict CPP production+fixture1802 PASS. FullG0/deploy and actual
+hot route/250ms retry pending, no successful admission/timing claim yet.
+
 Actualefc4cc7b fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
 standardGameplay060336-67688f client1 nativeapply24511→24518ms succeeds; final
 gear then stale25310ms, postapply792ms. No measured benefit vsprior client2

@@ -132,7 +132,10 @@ bool gameplay_current_positive(const GameplayPawn& entry,bool code_supported,uin
     reason(entry.current_binding.reason?entry.current_binding.reason:GP_CURRENT_ABSENT);if(!entry.current)return false;
     reason(GP_CURRENT_CODE);if(!code_supported)return false;const auto& profile=*entry.current;
     reason(GP_CURRENT_SCHEMA);
-    if(profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return false;
+    // The adapter publishes FBoolProperty::GetByteMask, not GetFieldMask.
+    // This exact native property's observed ByteMask is1; the pinned native
+    // IsLocalController leaf itself tests the entire byte against zero.
+    if(profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=1)return false;
     const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
     reason(GP_CURRENT_VTABLE);uint64_t table{},target{};std::memcpy(&table,pc,8);if(!table||table!=profile.vtable)return false;
     reason(GP_CURRENT_TARGET);std::memcpy(&target,reinterpret_cast<const uint8_t*>(table)+0x7a8,8);if(target!=base+0x37d5060)return false;
@@ -157,7 +160,7 @@ void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
     const bool bool_type=found==1&&profile.local.cls==name(L"BoolProperty");
     entry.current_binding.found=found==1?1u:0u;entry.current_binding.schema=profile.local;
     entry.current_binding.type=bool_type?1u:0u;entry.current_binding.reason=GP_CURRENT_SCHEMA;
-    if(!bool_type||profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return;
+    if(!bool_type||profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=1)return;
     entry.current_binding.reason=GP_CURRENT_CODE;uintptr_t image{};if(!gameplay_current_code(image,&entry.current_binding.code))return;
     std::memcpy(&profile.vtable,pc,8);
     const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
