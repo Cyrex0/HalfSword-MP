@@ -2,6 +2,37 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual bdf74799 full G0 passed (Lua77 / Rust1378 /79 test binaries), pushed dev,
+RequireG0 deployed all396 files. Standard Gameplay130921-cc011c reaches native
+construction/finish on both clients, then FIRST apply fails before LIVE. Client1
+frame86 apply18240->18484ms (244ms), original entry age7.3516ms; client2
+18206->18445ms (239ms), original entry age12.9181ms. Both reject with
+`native source/world operation guard changed`; client2 includes exact_find
+diagnostic. These elapsed values suggest receipt expiry but do not identify
+the actual failing guard cause. Original PIDs6744/20808 copied attempt1 confirms
+AFTER world quaternion and cache quaternion exactly equal requested on both;
+the absolute update executed, but complete acceptance has not passed. No LIVE
+source input (0/0); do not claim drift or gameplay fixed. Next isolate exact
+Rust Context guard cause and added native apply validation cost, retaining
+original250ms receipt and all root/native profile/gear checks. No blind rerun.
+Early secondary placement passed; no model pixels observed. Independent cleanup
+passed/four originals absent/20 career hashes unchanged/no new dumps or children.
+Full diagnostics/phases/state/codec/cleanup: native_operator_summary.json.
+Next bounded diagnostic candidate is frozen and independently reviewed. Rust
+Context records the FIRST exact failed predicate; only ReceiptExpired plus the
+exact native guard-refusal text or fully parsed existing cold-lookup diagnostic
+grammar becomes `native gameplay result is stale`. Earlier admission/generation/
+panic or unknown/incomplete provider errors remain fatal. No later-time inference,
+receipt renewal, proof/ACK or input changes. Focused gameplay Rust12 PASS.
+Existing quaternion reporter adds one copied cost row per reported attempt:
+total and five sequential phases; native guard/image/pure counts and explicitly
+inclusive elapsed values (do not add nested buckets). Prepare includes mutex
+wait. Maximum108 lines/9 attempts; worst label290 bytes fits319. Timers add no
+native query or validation; TLS/watch/operation/mutex unwind before logger.
+Strict production/fixture compile PASS; existing lifetime fixture2047 assertions.
+Both independent reviews CLOSED. Full G0/deploy and ONE actual timing run next;
+do not select a structural optimization from static invocation counts alone.
+
 Owner explicitly resumed continuous multiplayer work on 2026-10-10. Sol6.1
 extra-high agents are implementing a bounded native-state candidate; no release
 or parity claim follows from compression or offline validation.

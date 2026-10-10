@@ -18,6 +18,13 @@ struct GameplayCurrent {
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
 struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
 std::atomic<uint32_t> gameplay_current_attempts{};
+struct GameplayApplyCosts {std::array<uint64_t,3> ns{},count{};std::array<uint64_t,5> phases{};uint64_t total{};uint32_t phase{1};};
+thread_local GameplayApplyCosts* gameplay_apply_costs{};
+struct GameplayApplyTimer {
+    GameplayApplyCosts* costs{gameplay_apply_costs};uint32_t bucket{};std::chrono::steady_clock::time_point started{};
+    explicit GameplayApplyTimer(uint32_t index):bucket(index){if(costs){++costs->count[bucket];started=std::chrono::steady_clock::now();}}
+    ~GameplayApplyTimer(){if(costs)timer_accumulate(costs->ns[bucket],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-started).count()),true);}
+};
 struct GameplayQuatSnapshot {uint32_t available{},reason{},cache{};uint64_t class_name{},slot{};std::array<double,4> world{},cached{};std::array<double,3> relative{},euler{};};
 bool gameplay_quat_readable(const void* pointer,size_t bytes){
     uintptr_t at=reinterpret_cast<uintptr_t>(pointer);if(!at||bytes>UINTPTR_MAX-at)return false;const auto end=at+bytes;
@@ -56,12 +63,27 @@ struct GameplayQuatTrace {
     HsmpPresentationCreateLog logger{create_logger.load()};uint32_t attempt{},complete{};bool active{};
     GameplayQuatSnapshot before,after;std::array<double,4> requested{};
     HsmpNativePathNode original_root{};uint32_t root_flags{},root_class_flags{};bool root_bound{};
-    GameplayQuatTrace(){if(!logger)return;auto used=gameplay_quat_attempts.load();while(used<8){if(gameplay_quat_attempts.compare_exchange_weak(used,used+1)){attempt=used+1;break;}}active=attempt||!gameplay_quat_failure.load();}
+    GameplayApplyCosts costs;GameplayApplyCosts* previous_costs{gameplay_apply_costs};std::chrono::steady_clock::time_point started{},boundary{};
+    GameplayQuatTrace(){if(logger){auto used=gameplay_quat_attempts.load();while(used<8){if(gameplay_quat_attempts.compare_exchange_weak(used,used+1)){attempt=used+1;break;}}active=attempt||!gameplay_quat_failure.load();}
+        gameplay_apply_costs=active?&costs:nullptr;if(active)started=boundary=std::chrono::steady_clock::now();}
+    void phase(uint32_t next){if(!active)return;const auto now=std::chrono::steady_clock::now();timer_accumulate(costs.phases[costs.phase-1],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now-boundary).count()),true);costs.phase=next;boundary=now;}
+    void cost_row()const{
+        bool capped{};const auto scalar=[&capped](uint64_t value){if(value>UINT32_MAX){capped=true;return UINT32_MAX;}return static_cast<uint32_t>(value);};
+        const auto total=scalar(costs.total/1000);std::array<uint32_t,5> phases{};std::array<uint32_t,3> ns{},count{};
+        for(size_t i=0;i<5;++i)phases[i]=scalar(costs.phases[i]/1000);for(size_t i=0;i<3;++i){ns[i]=scalar(costs.ns[i]/1000);count[i]=scalar(costs.count[i]);}
+        char text[320]{};std::snprintf(text,sizeof(text),"cost total_us=%u phase=%u prepare_us=%u bind_us=%u update_us=%u post_us=%u final_us=%u guard_n=%u guard_us=%u image_n=%u image_us=%u pure_n=%u pure_us=%u capped=%u inclusive=true",
+            total,costs.phase,phases[0],phases[1],phases[2],phases[3],phases[4],count[0],ns[0],count[1],ns[1],count[2],ns[2],capped?1u:0u);
+        logger("gameplay_quat",3,0,attempt,complete,0,0,text);
+    }
     void values(const char* label,const double* data,size_t count,uint32_t edge)const{
         char text[320]{};size_t at{};for(size_t i=0;i<count;++i){uint64_t bits{};std::memcpy(&bits,data+i,8);const auto n=std::snprintf(text+at,sizeof(text)-at,"%s%zu=%.17g/%016llx ",label,i,data[i],static_cast<unsigned long long>(bits));if(n<0||static_cast<size_t>(n)>=sizeof(text)-at)break;at+=static_cast<size_t>(n);}
         logger("gameplay_quat",edge,0,attempt,complete,0,0,text);
     }
-    ~GameplayQuatTrace(){if(!active)return;if(!attempt&&!complete){if(!gameplay_quat_failure.exchange(true))attempt=9;}if(!attempt)return;
+    ~GameplayQuatTrace(){gameplay_apply_costs=previous_costs;if(!active)return;const auto ended=std::chrono::steady_clock::now();
+        timer_accumulate(costs.phases[costs.phase-1],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ended-boundary).count()),true);
+        costs.total=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ended-started).count());
+        if(!attempt&&!complete){if(!gameplay_quat_failure.exchange(true))attempt=9;}if(!attempt)return;
+        cost_row();
         values("requested_q",requested.data(),4,0);
         for(const auto& [edge,row]:{std::pair<uint32_t,const GameplayQuatSnapshot*>{1,&before},{2,&after}}){char label[192]{};
             std::snprintf(label,sizeof(label),"available=%u reason=%u cache=%u class_fname=%016llx move_rva=%llx cached_equals_requested=%u evidence_only=true",row->available,row->reason,row->cache,static_cast<unsigned long long>(row->class_name),static_cast<unsigned long long>(row->slot),row->cache&&std::memcmp(row->cached.data(),requested.data(),32)==0?1u:0u);
@@ -350,6 +372,7 @@ using GameplayAbsolute=uint8_t(*)(void*,const double*,const double*,uint8_t,uint
 using GameplayOverlaps=uint8_t(*)(void*,const GameplayOverlapView*,uint8_t,const GameplayOverlapView*);
 struct GameplayNativeCalls {GameplayImport import{};GameplayAbsolute absolute{};GameplayOverlaps overlaps{};};
 uintptr_t gameplay_native_image(){
+    GameplayApplyTimer image_time(1);
     uintptr_t image{};uint32_t size{};require(gameplay_quat_image(image,size),"native gameplay absolute image/code unavailable");
     struct Window{uint32_t rva,bytes;uint64_t hash;};
     constexpr Window windows[]{{0x3bf5ad0,401,0x9f9ffdef88936f35ULL},{0x3bf1970,2355,0x8a824d5b8f611ae4ULL},
@@ -401,6 +424,7 @@ void gameplay_native_root_fields(const void* root,const void* pawn,const void* o
     for(const auto value:cache.rotation)require(std::isfinite(value),"native gameplay current cache rotation nonfinite");
 }
 void gameplay_native_pure(const GameplayPawn& entry,const GameplayNativeProof& proof){
+    GameplayApplyTimer pure_time(2);
     gameplay_pure(entry);lookup_entry_final(proof.root_path);require(proof.image&&gameplay_native_image()==proof.image,"native gameplay original absolute image changed");
     const auto* root=lookup_node_get(proof.root_path.pinned.front(),proof.root_path.zero_item);const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
     const auto* outer=source_outer(root);require(outer!=nullptr,"native gameplay original root Outer unavailable");gameplay_native_root_fields(root,pawn,*outer,proof);
@@ -413,7 +437,7 @@ struct GameplayNativeWatch {
     GameplayNativeWatch(const GameplayPawn& e,const GameplayNativeProof& p):entry(e),proof(p){gameplay_native_pure(entry,proof);gameplay_native_active=this;}
     ~GameplayNativeWatch(){gameplay_native_active=previous;}
 };
-void gameplay_native_guard(){if(!gameplay_native_active)return;require(active_lookup==gameplay_native_active->operation,"native gameplay absolute operation reentry");
+void gameplay_native_guard(){if(!gameplay_native_active)return;GameplayApplyTimer guard_time(0);require(active_lookup==gameplay_native_active->operation,"native gameplay absolute operation reentry");
     gameplay_native_pure(gameplay_native_active->entry,gameplay_native_active->proof);}
 GameplayNativeProof gameplay_native_bind(const GameplayPawn& entry,Obj root){
     GameplayNativeProof proof;proof.root_path=gameplay_path(root);proof.image=gameplay_native_image();
@@ -644,13 +668,13 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_transform_code();const auto root=object_property(entry.pawn,L"RootComponent");require(root.weak&&is(root,L"/Script/Engine.SceneComponent"),"native gameplay native transform root unavailable");
         require(property(entry.pawn,L"RootComponent",L"ObjectProperty",8).offset==0x1a0&&!object_property(root,L"AttachParent").weak,"native gameplay native transform root layout/attachment");
         if(diagnostic.active)std::copy_n(state->orientation,4,diagnostic.requested.data());
-        auto native=gameplay_native_bind(entry,root);GameplayNativeWatch native_watch(entry,native);
+        diagnostic.phase(2);auto native=gameplay_native_bind(entry,root);GameplayNativeWatch native_watch(entry,native);
         const GameplayNativeCalls calls{reinterpret_cast<GameplayImport>(native.image+0x3bf5ad0),reinterpret_cast<GameplayAbsolute>(native.image+0x3bf1970),reinterpret_cast<GameplayOverlaps>(native.image+0x3bf7f40)};
         const auto original=[&](){check_guard();lookup_finish();gameplay_native_pure(entry,native);return const_cast<void*>(lookup_node_get(native.root_path.pinned.front(),native.root_path.zero_item));};
-        gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.before);gameplay_absolute_run(*state,calls,original);
+        diagnostic.phase(3);gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.before);gameplay_absolute_run(*state,calls,original);
         Function scale(L"/Script/Engine.SceneComponent:SetRelativeScale3D");scale.put(L"NewScale3D",L"StructProperty",GameplayVector{entry.initial.scale[0],entry.initial.scale[1],entry.initial.scale[2]},L"Vector");scale.call(root,result);
         original();gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.after);
-        const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
+        diagnostic.phase(4);const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
         require(same(returned(movement,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay movement owner changed");
         const auto velocity=property(movement,L"Velocity",L"StructProperty",24);require(velocity.sub==name(L"Vector"),"native gameplay velocity layout");std::memcpy(static_cast<uint8_t*>(get(movement))+velocity.offset,state->velocity,24);get(movement);
         gameplay_value(entry.pawn,L"Health",state->health);gameplay_value(entry.pawn,L"Stamina",state->stamina);
@@ -665,7 +689,7 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_root_readback(*state,actual_position,actual_orientation,actual_velocity);require(std::memcmp(actual.scale,entry.initial.scale,24)==0,"native gameplay exact actor scale readback failed");
         gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
         gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
-        auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement,root);
+        diagnostic.phase(5);auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement,root);
         applied.native=native;
         lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;diagnostic.complete=1;return 1;
     }catch(const std::exception& error){if(proof)*proof={};failure(result,error.what());return -1;}

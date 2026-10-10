@@ -1574,12 +1574,13 @@ void gameplay_current_checks(HsmpReflect& reflect){
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
-std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};
-void record_gameplay_quat(const char* stage,uint32_t,uint64_t,uint32_t attempt,uint32_t,uint32_t,uint32_t,const char* label){
+std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};std::vector<std::string> gameplay_cost_records;
+void record_gameplay_quat(const char* stage,uint32_t edge,uint64_t,uint32_t attempt,uint32_t,uint32_t,uint32_t,const char* label){
     bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
-    gameplay_quat_outside=gameplay_quat_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active;
+    gameplay_quat_outside=gameplay_quat_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active&&!gameplay_native_active&&!gameplay_apply_costs;
     check(std::strcmp(stage,"gameplay_quat")==0&&std::strlen(label)<320,"quaternion diagnostic has a distinct bounded copied label");
     gameplay_quat_bits=gameplay_quat_bits||std::strstr(label,"8000000000000000")!=nullptr;gameplay_quat_records.push_back(attempt);
+    if(edge==3)gameplay_cost_records.emplace_back(label);
 }
 void gameplay_quat_checks(HsmpReflect& reflect){
     alignas(16) std::array<uint8_t,0x200> root{};alignas(16) std::array<double,8> cache{};
@@ -1600,13 +1601,21 @@ void gameplay_quat_checks(HsmpReflect& reflect){
     pointer=cache.data();std::memcpy(root.data()+0x1c0,&pointer,8);cache[2]=std::nextafter(-0.,1.);GameplayQuatSnapshot after;
     check(gameplay_quat_copy(root.data(),after)&&after.cached[2]!=before.cached[2],"each snapshot rereads native cache values rather than reusing a prior observation");
     before.available=after.available=1;hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);
-    {GameplayQuatTrace disabled;check(!disabled.active&&gameplay_quat_attempts.load()==0,"disabled quaternion logger consumes no attempt or snapshot");}
-    gameplay_quat_records.clear();gameplay_quat_outside=true;gameplay_quat_bits=false;hsmp_presentation_set_create_log(record_gameplay_quat);
+    {GameplayQuatTrace disabled;GameplayApplyTimer timer(0);check(!disabled.active&&gameplay_quat_attempts.load()==0&&!gameplay_apply_costs,"disabled quaternion logger consumes no attempt, timing or snapshot");}
+    gameplay_quat_records.clear();gameplay_cost_records.clear();gameplay_quat_outside=true;gameplay_quat_bits=false;hsmp_presentation_set_create_log(record_gameplay_quat);
     for(int i=0;i<12;++i){{GameplayQuatTrace trace;const std::lock_guard lock(gameplay_mutex);int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,keep(&old_world));
         trace.before=before;trace.after=after;trace.requested=q;trace.complete=i!=2&&i<10?1u:0u;
+        {GameplayApplyTimer native_guard(0),native_pure(2);rejects([]{gameplay_native_image();},"failed native image pin still contributes copied inclusive cost without native queries");}
+        if(trace.active){check(trace.costs.count==std::array<uint64_t,3>{1,1,1},"guard, pure and image counts remain separate inclusive buckets");
+            trace.costs.ns[0]=400000;trace.phase(4);
+            auto* outer_cost=gameplay_apply_costs;hsmp_presentation_set_create_log(nullptr);
+            {GameplayQuatTrace disabled;check(!gameplay_apply_costs,"nested disabled operation cannot add timing to its outer row");}
+            hsmp_presentation_set_create_log(record_gameplay_quat);check(gameplay_apply_costs==outer_cost,"nested diagnostic restores the original operation collector");}
     }if(i==2)check(!gameplay_quat_failure.load(),"failure within first8 preserves the first later-failure reporter slot");
     }
-    check(gameplay_quat_records.size()==99&&std::count(gameplay_quat_records.begin(),gameplay_quat_records.end(),9u)==11,"quaternion reporter is bounded to first8 plus first laterfailure, eleven copied lines each");
+    check(gameplay_quat_records.size()==108&&std::count(gameplay_quat_records.begin(),gameplay_quat_records.end(),9u)==12,"quaternion reporter is bounded to first8 plus first laterfailure, twelve copied lines each");
+    check(gameplay_cost_records.size()==9&&std::all_of(gameplay_cost_records.begin(),gameplay_cost_records.end(),[](const std::string& row){return row.find("phase=4")!=std::string::npos&&row.find("guard_n=1 guard_us=400 image_n=1")!=std::string::npos&&row.ends_with("inclusive=true");}),
+        "one copied cost row retains final phase and nanosecond totals without summing inclusive durations");
     check(gameplay_quat_outside&&gameplay_quat_bits,"quaternion raw signed-zero bits emit after native scope/watch/mutex unwind");
     hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);lifetime_reset(reflect);
 }

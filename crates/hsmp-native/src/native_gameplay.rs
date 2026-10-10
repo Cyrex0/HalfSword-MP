@@ -7,6 +7,7 @@ use crate::{
 };
 use hsmp_server::{native_gameplay_wire as gp, native_service::GameplayScene, native_wire as w};
 use std::{
+    cell::Cell,
     collections::HashMap,
     ffi::{c_int, c_void},
     sync::{
@@ -150,6 +151,109 @@ impl State {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GuardFailure {
+    OriginalAdmission,
+    Generation,
+    ReceiptExpired,
+    Panic,
+}
+#[derive(Default)]
+struct GuardFailureLatch(Cell<Option<GuardFailure>>);
+impl GuardFailureLatch {
+    fn refuse(&self, cause: GuardFailure) -> bool {
+        if self.0.get().is_none() {
+            self.0.set(Some(cause));
+        }
+        false
+    }
+    fn guard_error(&self, fallback: String) -> String {
+        if self.0.get() == Some(GuardFailure::ReceiptExpired) {
+            "native gameplay result is stale".into()
+        } else {
+            fallback
+        }
+    }
+    fn provider_error(&self, reason: &str, fallback: String) -> String {
+        if known_guard_refusal(reason) {
+            self.guard_error(fallback)
+        } else {
+            fallback
+        }
+    }
+}
+fn known_guard_refusal(reason: &str) -> bool {
+    const REFUSAL: &str = "native source/world operation guard changed";
+    if reason == REFUSAL {
+        return true;
+    }
+    let Some(suffix) = reason
+        .strip_prefix(REFUSAL)
+        .and_then(|s| s.strip_prefix("; stage="))
+    else {
+        return false;
+    };
+    // Only the existing lookup_cold_failure snprintf grammar may decorate a
+    // known guard refusal. Unknown/truncated provider errors remain fatal.
+    let mut fields = suffix.split(' ');
+    if !matches!(
+        fields.next(),
+        Some("package" | "root_node" | "outer_node" | "path_close" | "exact_find" | "exact_pin")
+    ) {
+        return false;
+    }
+    let Some(depth) = fields.next().and_then(|s| s.strip_prefix("n=")) else {
+        return false;
+    };
+    if depth.is_empty()
+        || !depth.bytes().all(|c| c.is_ascii_digit())
+        || depth.parse::<u32>().is_err()
+    {
+        return false;
+    }
+    for key in ["w=", "rw="] {
+        if !fields
+            .next()
+            .and_then(|s| s.strip_prefix(key))
+            .is_some_and(guard_hex)
+        {
+            return false;
+        }
+    }
+    let Some(slot) = fields.next().and_then(|s| s.strip_prefix("idx0=")) else {
+        return false;
+    };
+    let mut parts = slot.split('/');
+    for _ in 0..4 {
+        if !matches!(parts.next(), Some("-1" | "0" | "1")) {
+            return false;
+        }
+    }
+    if parts.next().is_some() {
+        return false;
+    }
+    for key in ["a=", "r="] {
+        if !fields
+            .next()
+            .and_then(|s| s.strip_prefix(key))
+            .is_some_and(guard_hex)
+        {
+            return false;
+        }
+    }
+    fields.next().is_none()
+}
+fn guard_hex(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 16
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+fn guard_check(failure: &GuardFailureLatch, valid: impl FnOnce() -> bool) -> i32 {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| valid() as i32))
+        .unwrap_or_else(|_| failure.refuse(GuardFailure::Panic) as i32)
+}
 struct Context {
     native: *const Native,
     vt: *const HsmpReflect,
@@ -159,6 +263,7 @@ struct Context {
     key: Vec<u8>,
     cleanup: bool,
     application: bool,
+    failure: GuardFailureLatch,
 }
 impl Context {
     fn new(
@@ -180,6 +285,7 @@ impl Context {
                 .ok_or("gameplay world token unavailable")?,
             cleanup: false,
             application: false,
+            failure: GuardFailureLatch::default(),
         })
     }
     unsafe fn valid(&self) -> bool {
@@ -195,7 +301,7 @@ impl Context {
                 || reflect::get(vt, self.world.weak) as u64 != self.world.address
                 || reflect::get(vt, self.controller.weak) as u64 != self.controller.address
             {
-                return false;
+                return self.failure.refuse(GuardFailure::OriginalAdmission);
             }
             if self.cleanup {
                 return true;
@@ -206,9 +312,15 @@ impl Context {
                 .as_ref()
                 .and_then(|c| c.gameplay_scene())
             else {
-                return false;
+                return self.failure.refuse(GuardFailure::Generation);
             };
-            same_generation(&self.scene, &scene) && (!self.application || self.scene.fresh())
+            if !same_generation(&self.scene, &scene) {
+                return self.failure.refuse(GuardFailure::Generation);
+            }
+            if self.application && !self.scene.fresh() {
+                return self.failure.refuse(GuardFailure::ReceiptExpired);
+            }
+            true
         }
     }
     fn ffi(&mut self) -> Guard {
@@ -232,10 +344,8 @@ unsafe extern "C" fn check(p: *mut c_void) -> i32 {
     if p.is_null() {
         return 0;
     }
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-        (&*p.cast::<Context>()).valid() as i32
-    }))
-    .unwrap_or(0)
+    let context = unsafe { &*p.cast::<Context>() };
+    guard_check(&context.failure, || unsafe { context.valid() })
 }
 unsafe fn object(vt: &HsmpReflect, address: i64) -> Result<Object, String> {
     unsafe {
@@ -786,14 +896,15 @@ impl Native {
                         Context::new(self, vt, s.clone(), pawn.world, pawn.controller)?;
                     context.application = true;
                     if !context.valid() {
-                        return Err("gameplay apply admission changed".into());
+                        return Err(context
+                            .failure
+                            .guard_error("gameplay apply admission changed".into()));
                     }
                     let state = native_state(row);
                     let mut proof = Proof::default();
                     let mut r = ResultInfo::default();
                     if (p.apply)(pawn.handle, &state, &context.ffi(), &mut proof, &mut r) != 1
                         || r.complete != 1
-                        || !context.valid()
                     {
                         let reason = r.reason();
                         return Err(
@@ -804,9 +915,17 @@ impl Native {
                             ) {
                                 reason
                             } else {
-                                format!("native gameplay apply: {reason}")
+                                context.failure.provider_error(
+                                    &reason,
+                                    format!("native gameplay apply: {reason}"),
+                                )
                             },
                         );
+                    }
+                    if !context.valid() {
+                        return Err(context
+                            .failure
+                            .guard_error(format!("native gameplay apply: {}", r.reason())));
                     }
                     let required = if pawn.own { 63 } else { 3 };
                     if proof.flags & required != required
@@ -828,7 +947,9 @@ impl Native {
                 let mut context = Context::new(self, vt, s.clone(), first.world, first.controller)?;
                 context.application = true;
                 if !context.valid() {
-                    return Err("gameplay full set admission changed".into());
+                    return Err(context
+                        .failure
+                        .guard_error("gameplay full set admission changed".into()));
                 }
                 let mut proofs = (0..handles.len())
                     .map(|_| Proof::default())
@@ -842,9 +963,16 @@ impl Native {
                     &mut complete,
                 ) != 1
                     || complete.complete != 1
-                    || !context.valid()
                 {
-                    return Err(format!("gameplay full set proof: {}", complete.reason()));
+                    let reason = complete.reason();
+                    return Err(context
+                        .failure
+                        .provider_error(&reason, format!("gameplay full set proof: {reason}")));
+                }
+                if !context.valid() {
+                    return Err(context
+                        .failure
+                        .guard_error(format!("gameplay full set proof: {}", complete.reason())));
                 }
                 for (proof, (own, world, controller, original)) in proofs.iter().zip(ownership) {
                     let required = if own { 63 } else { 3 };
@@ -930,7 +1058,9 @@ impl Native {
                 let mut context = Context::new(self, vt, original.clone(), first.1, first.2)?;
                 context.application = true;
                 if !context.valid() {
-                    return Err("gameplay confirmation admission changed".into());
+                    return Err(context
+                        .failure
+                        .guard_error("gameplay confirmation admission changed".into()));
                 }
                 let mut proofs = (0..handles.len())
                     .map(|_| Proof::default())
@@ -944,12 +1074,18 @@ impl Native {
                     &mut r,
                 ) != 1
                     || r.complete != 1
-                    || !context.valid()
                 {
-                    return Err(format!(
+                    let reason = r.reason();
+                    return Err(context.failure.provider_error(
+                        &reason,
+                        format!("gameplay confirmation full native proof: {reason}"),
+                    ));
+                }
+                if !context.valid() {
+                    return Err(context.failure.guard_error(format!(
                         "gameplay confirmation full native proof: {}",
                         r.reason()
-                    ));
+                    )));
                 }
                 for (proof, (own, world, controller, pawn)) in proofs.iter().zip(expected) {
                     let required = if own { 63 } else { 3 };
@@ -1035,6 +1171,79 @@ impl Native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_guard_expiry_preserves_first_cause_and_known_provider_grammar() {
+        let original = scene_fixture();
+        let received = original.received;
+        let result = original.result.clone();
+        let failure = GuardFailureLatch::default();
+        assert_eq!(
+            guard_check(&failure, || failure.refuse(GuardFailure::ReceiptExpired)),
+            0
+        );
+        for reason in [
+            "native source/world operation guard changed",
+            "native source/world operation guard changed; stage=exact_find n=1 w=404000000ea rw=1ef idx0=-1/-1/-1/-1 a=24c031bb480 r=24c06765400",
+        ] {
+            assert_eq!(failure.provider_error(reason, format!("native gameplay apply: {reason}")), "native gameplay result is stale");
+        }
+        for reason in [
+            "native gameplay exact root readback changed",
+            "",
+            "native source/world operation guard changed; unknown=1",
+            "native source/world operation guard changed; stage=exact_find n=1 w=0 rw=0 idx0=-1/-1/-1/-1 a=0 r=",
+            "native source/world operation guard changed; stage=exact_find n=1 w=0 rw=0 idx0=-1/-1/-1/-1 a=0 r=0 extra=1",
+        ] {
+            let fatal = format!("native gameplay apply: {reason}");
+            assert_eq!(failure.provider_error(reason, fatal.clone()), fatal, "an expired receipt does not relabel unknown/incomplete native failure");
+        }
+        assert_eq!(original.received, received);
+        assert!(Arc::ptr_eq(&original.result, &result));
+        let state = State::default();
+        assert!(
+            state.applied.is_none(),
+            "reason classification publishes no partial apply/input proof"
+        );
+        for first in [
+            GuardFailure::OriginalAdmission,
+            GuardFailure::Generation,
+            GuardFailure::Panic,
+        ] {
+            let failure = GuardFailureLatch::default();
+            assert!(!failure.refuse(first));
+            assert!(!failure.refuse(GuardFailure::ReceiptExpired));
+            let fatal =
+                "native gameplay apply: native source/world operation guard changed".to_owned();
+            assert_eq!(
+                failure
+                    .provider_error("native source/world operation guard changed", fatal.clone()),
+                fatal
+            );
+            assert_eq!(
+                failure.0.get(),
+                Some(first),
+                "later expiry never overwrites original identity/generation/panic failure"
+            );
+        }
+    }
+    #[test]
+    fn guard_panic_and_incomplete_without_failed_predicate_are_never_expiry() {
+        let failure = GuardFailureLatch::default();
+        assert_eq!(guard_check(&failure, || panic!("guard fixture")), 0);
+        assert_eq!(failure.0.get(), Some(GuardFailure::Panic));
+        assert!(!failure.refuse(GuardFailure::ReceiptExpired));
+        assert_eq!(failure.guard_error("guard failed".into()), "guard failed");
+        let incomplete = GuardFailureLatch::default();
+        assert_eq!(guard_check(&incomplete, || true), 1);
+        assert_eq!(
+            incomplete.provider_error(
+                "native source/world operation guard changed",
+                "native incomplete".into()
+            ),
+            "native incomplete"
+        );
+        assert_eq!(incomplete.0.get(), None);
+    }
     use std::time::{Duration, Instant};
 
     #[test]
