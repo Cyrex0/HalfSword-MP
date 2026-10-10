@@ -26,6 +26,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   newer tick in the same generation cannot replace it or renew its expiry.
 - Carry native quaternion orientation as lossless doubles in the compact gameplay
   stream, with a required capability and result version for the enlarged layout.
+- Validate native pawn guards without constructing discarded Lua wrappers, while
+  retaining original actor checks and complete equipment readback.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

@@ -93,6 +93,26 @@ fn provider() -> Result<&'static Provider, String> {
             .ok_or_else(|| "native gameplay provider unavailable".into())
     }
 }
+unsafe fn current_mode(L: *mut lua_State) -> Result<bool, String> {
+    unsafe {
+        match lua_gettop(L) {
+            1 => Ok(false),
+            2 if lua_type(L, 2) == LUA_TBOOLEAN => Ok(lua_toboolean(L, 2) != 0),
+            _ => Err("native gameplay current mode must be boolean".into()),
+        }
+    }
+}
+fn current_output(
+    scalar: bool,
+    admitted: Result<Object, String>,
+    wrap: impl FnOnce(Object) -> Result<(), String>,
+) -> Result<bool, String> {
+    let object = admitted?;
+    if !scalar {
+        wrap(object)?;
+    }
+    Ok(scalar)
+}
 struct Pawn {
     handle: u64,
     scene: GameplayScene,
@@ -641,15 +661,20 @@ impl Native {
         }
     }
     pub unsafe fn native_gameplay_current(&mut self, L: *mut lua_State) -> c_int {
-        unsafe { self.gameplay_stage(L, 0) }
+        unsafe {
+            match current_mode(L) {
+                Ok(scalar) => self.gameplay_stage(L, 0, scalar),
+                Err(reason) => nil_err(L, &reason),
+            }
+        }
     }
     pub unsafe fn native_gameplay_construct(&mut self, L: *mut lua_State) -> c_int {
-        unsafe { self.gameplay_stage(L, 1) }
+        unsafe { self.gameplay_stage(L, 1, false) }
     }
     pub unsafe fn native_gameplay_finish(&mut self, L: *mut lua_State) -> c_int {
-        unsafe { self.gameplay_stage(L, 2) }
+        unsafe { self.gameplay_stage(L, 2, false) }
     }
-    unsafe fn gameplay_stage(&mut self, L: *mut lua_State, stage: u8) -> c_int {
+    unsafe fn gameplay_stage(&mut self, L: *mut lua_State, stage: u8, scalar: bool) -> c_int {
         unsafe {
             let top = lua_gettop(L);
             let result = (|| -> Result<(), String> {
@@ -680,14 +705,23 @@ impl Native {
                     1 => (p.construct)(handle, &context.ffi(), &mut object, &mut r),
                     _ => (p.finish)(handle, &context.ffi(), &mut r),
                 };
-                if ok != 1 || r.complete != 1 || !context.valid() {
-                    return Err(format!("gameplay stage: {}", r.reason()));
-                }
-                if stage != 0 {
+                let admitted = if ok != 1 || r.complete != 1 || !context.valid() {
+                    Err(format!("gameplay stage: {}", r.reason()))
+                } else {
+                    Ok(object)
+                };
+                if stage == 0 {
+                    if current_output(scalar, admitted, |object| {
+                        wrapper(L, p, handle, &mut context, object)
+                    })? {
+                        lua_pushboolean(L, 1);
+                    }
+                } else {
+                    let object = admitted?;
                     lua_pushboolean(L, 1);
-                }
-                if stage != 2 {
-                    wrapper(L, p, handle, &mut context, object)?;
+                    if stage == 1 {
+                        wrapper(L, p, handle, &mut context, object)?;
+                    }
                 }
                 if let Some(pawn) = self
                     .native_host
@@ -1000,6 +1034,77 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    #[test]
+    fn current_scalar_mode_requires_an_explicit_boolean_without_stack_changes() {
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            assert!(!L.is_null());
+            assert!(current_mode(L).is_err());
+            lua_pushinteger(L, 7);
+            assert!(!current_mode(L).unwrap());
+            assert_eq!(lua_gettop(L), 1);
+            for scalar in [false, true] {
+                lua_settop(L, 1);
+                lua_pushboolean(L, i32::from(scalar));
+                assert_eq!(current_mode(L).unwrap(), scalar);
+                assert_eq!(lua_gettop(L), 2);
+            }
+            for kind in [LUA_TNIL, LUA_TNUMBER, LUA_TTABLE, LUA_TSTRING] {
+                lua_settop(L, 1);
+                match kind {
+                    LUA_TNIL => lua_pushnil(L),
+                    LUA_TNUMBER => lua_pushinteger(L, 1),
+                    LUA_TTABLE => lua_createtable(L, 0, 0),
+                    _ => push_str(L, "true"),
+                }
+                assert!(current_mode(L).is_err());
+                assert_eq!(lua_gettop(L), 2);
+            }
+            lua_settop(L, 1);
+            lua_pushboolean(L, 1);
+            lua_pushboolean(L, 1);
+            assert!(current_mode(L).is_err());
+            mlua::ffi::lua_close(L.cast());
+        }
+    }
+    #[test]
+    fn current_scalar_output_skips_factory_and_preserves_admission_failures() {
+        let original = Object {
+            weak: 0x700000003,
+            address: 0x12345678,
+        };
+        assert!(current_output(true, Ok(original), |_| {
+            panic!("scalar guard must never enter wrapper factory")
+        })
+        .unwrap());
+        let mut wrapped = 0;
+        assert!(!current_output(false, Ok(original), |object| {
+            wrapped += 1;
+            assert_eq!(object.weak, original.weak);
+            assert_eq!(object.address, original.address);
+            Ok(())
+        })
+        .unwrap());
+        assert_eq!(wrapped, 1);
+        for scalar in [false, true] {
+            assert_eq!(
+                current_output(
+                    scalar,
+                    Err("gameplay stage: original guard changed".into()),
+                    |_| { panic!("failed admission must never construct a wrapper") }
+                )
+                .unwrap_err(),
+                "gameplay stage: original guard changed"
+            );
+        }
+        assert_eq!(
+            current_output(false, Ok(original), |_| Err(
+                "wrapper original changed".into()
+            ))
+            .unwrap_err(),
+            "wrapper original changed"
+        );
+    }
     fn scene_fixture() -> GameplayScene {
         let source =
             serde_json::from_slice::<hsmp_server::native_descriptor::SourceRecipe>(include_bytes!(

@@ -50,7 +50,11 @@ function M.new(env)
     end
     local function passport_env(row)
         local out={};local null_class
-        out.guard=function()current(row);return true end
+        out.guard=function()
+            local ok,reason=guarded(require_api("native_gameplay_current"),row.handle,true)
+            if ok~=true then fail(reason or"native gameplay original pawn guard unavailable")end
+            return true
+        end
         out.current=function()return current(row)end
         out.resolve_class=function(path)
             local o=guarded(env.find,path)

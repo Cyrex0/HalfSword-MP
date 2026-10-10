@@ -2,6 +2,35 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual9499cdd0 fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
+standardGameplay052656-bf39a7 BOTH native provider apply succeed (client1
+33863→33871ms, client2 34127→34138ms). Exact native quaternion/position/velocity,
+typed Health/Stamina and owned native body/view/generic-HUD proof pass. Subsequent
+full Lua gear readback delays client1 until35883ms, refusing original result stale;
+roughly2.012sec exceeds unchanged250ms receipt. Client2 later guard refusal follows
+primary failure. No ready/input0/0 or combat/all-gear/HalfSword-widget parity.
+Early original windows secondaryPASS; actual pixels show loading/error overlays.
+CleanupPASS/four absent/save20/nodumps. Evidence native_operator_summary.
+Next bounded final gear scan/guard cost optimization preserving complete native
+gear equality, postcallback original world/objects and original receipt expiry.
+No memoized old scan, final-check removal or expiry renewal accepted.
+Latest actual codec8 samples3080 raw→1550 compressed envelope bytes/20us total
+encode; roughly49.7% payload reduction, excludes UDP/auth and has no decode timing.
+Bounded cost analysis: env.guard discards native_gameplay_current wrapper; Rust
+current does provider admission once then wrapper construction performs it again.
+Static full25 weapon passport406 current calls,289 discarded guards; full scan
+49+426 per active alias plus armor11+sum(92+6 per blocked-row). These are static
+call counts, not actual timings. Candidate strict scalar guard keeps original full
+provider admission and removes discarded factory/duplicate current only. Actual
+250ms performance remains unproved; no weaker gear/world proof authorized.
+Strict scalar current(handle,true) candidate keeps one complete provider/current
+and Context admission, returns exact booleantrue without wrapper/factory/duplicate
+current. Missing/false mode keeps the existing full wrapper path; wrong types,
+extra arguments and provider failures refuse. Caller guards require true; actual
+getters remain unchanged. Focused native10/Lua141 PASS; no CPP/providerABI or
+receipt/final equipment check changes. Independent narrow review CLOSED;
+fullG0/deploy and actual scalar-guard timing retry pending.
+
 Actualac6df880 fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
 standardGameplay050251-a090a7 reaches provider apply. Exact failure is only yaw
 oneULP: requested134.97148132324216/readback134.97148132324213,

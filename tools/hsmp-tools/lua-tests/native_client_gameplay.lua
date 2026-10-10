@@ -3,7 +3,7 @@ local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
-    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0}
+    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0}
     local cls={GetAddress=function()return 100 end}
     local function pawn(id)
         local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
@@ -26,7 +26,16 @@ local function fixture()
         check(scene==f.scene and world==88 and pc==77,"begin uses exact current scene/world/controller")
         f.calls[#f.calls+1]="begin"..id;return id,f.pawns[id]
     end
-    N.native_gameplay_current=function(handle)if f.expired then return nil,"original native weak expired"end;return f.pawns[handle]end
+    N.native_gameplay_current=function(handle,scalar)
+        if f.expired then return nil,"original native weak expired"end
+        if scalar==true then
+            f.scalar_guards=f.scalar_guards+1
+            if f.scalar_error then return nil,f.scalar_error end
+            if f.scalar_result~=nil then return f.scalar_result end
+            return true
+        end
+        f.wrappers=f.wrappers+1;return f.pawns[handle]
+    end
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
     N.native_gameplay_finish=function(handle)f.calls[#f.calls+1]="possess"..handle;return true end
     N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";return true,scene end
@@ -62,6 +71,7 @@ do
     local f=fixture();f:bootstrap()
     check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,weapons2,gear2,possess2,gear2","native construction/live armor/weapons/gear/possession order including post-possession proof")
     check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
+    check(f.scalar_guards>0 and f.wrappers>0,"discarded guards use explicit scalar admission while actual getters retain full wrappers")
     f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
     check(ok==true and actual==f.scene and f.confirmed==1 and f.game:view_ready(actual),"complete raw state proof follows whole-roster Lua gear callbacks before readiness")
     check(table.concat(f.calls,","):match("apply,gear1,gear2,confirm$"),"confirmation runs after both final gear checks")
@@ -70,6 +80,18 @@ do
     local axes,buttons=Gameplay.intent(actual,actual.entities[1]);check(axes[1]==1 and axes[2]==0 and buttons==1,"first acceptance intent is only Move+Run")
     actual.fresh=false;check(Gameplay.intent(actual,actual.entities[1])==nil,"stale result cannot drive even bounded test intent")
     f.game:drop();check(f.forgot==1 and #f.game.rows==0,"world drop is scalar forget only")
+end
+do
+    local f=fixture();f.game:apply(f.scene);f.scalar_error="gameplay stage: original native weak expired"
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.scalar_error and f.wrappers==0 and #f.calls==1 and f.confirmed==0,
+        "scalar admission refusal preserves exact reason and prevents wrapper construction or stage advancement")
+end
+for _,value in ipairs({false,{},1})do
+    local f=fixture();f.game:apply(f.scene);f.scalar_result=value
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay original pawn guard unavailable" and f.wrappers==0 and #f.calls==1,
+        "only exact boolean true admits scalar pawn guard")
 end
 do
     local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.gear_error="original armor changed in later callback"
