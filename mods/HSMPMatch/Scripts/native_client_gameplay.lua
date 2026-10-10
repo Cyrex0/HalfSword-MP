@@ -1,7 +1,7 @@
 -- Native pawn bootstrap. Receipt, construction and possession are separate.
 local M={}
 local PENDING="native gameplay pawn preparing"
-local preparation={begin="present",passport="character",construct="present",native_setup="native_setup",equipment="equipment",possess="controls",post_equipment="check_equipment"}
+local preparation={begin="present",passport="character",construct="present",native_setup="native_setup",equipment="equipment",post_setup="native_setup",possess="controls",post_equipment="check_equipment"}
 local BOOTSTRAP_KEYS={schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true}
 local function fail(reason)error(reason,0)end
 local function exact_integer(v)return math.type(v)=="integer" and v>=0 end
@@ -203,11 +203,17 @@ function M.new(env)
                 elseif row.stage=="construct"then
                     local built,why=guarded(require_api("native_gameplay_construct"),row.handle)
                     if built~=true then fail(why or"native gameplay construction refused")end;row.stage="native_setup"
-                elseif row.stage=="native_setup"then
+                elseif row.stage=="native_setup"or row.stage=="post_setup"then
                     local pending,why=guarded(require_api("native_gameplay_initialized"),row.handle)
                     if pending==nil then fail(why or"native gameplay initialization unavailable")end
                     if not exact_integer(pending)then fail("native gameplay pending action count unavailable")end
-                    if pending==0 then row.stage="equipment"end
+                    if pending==0 then
+                        if row.stage=="post_setup"then
+                            local verified,verify_reason=Passport.verify_equipment(row.recipe,passport_env(row))
+                            if verified~=true then fail(verify_reason or"native gameplay equipment differs from authority")end
+                            row.stage="possess"
+                        else row.stage="equipment"end
+                    end
                 elseif row.stage=="equipment"then
                     if type(Passport.restore_live_armor)~="function"then fail("native gameplay live armor restoration unavailable")end
                     local restored,restore_reason=Passport.restore_live_armor(row.recipe,passport_env(row))
@@ -215,10 +221,10 @@ function M.new(env)
                     if type(Passport.restore_live_weapons)~="function"then fail("native gameplay live weapon restoration unavailable")end
                     local equipped,equip_reason=Passport.restore_live_weapons(row.recipe,passport_env(row))
                     if equipped~=true then fail(equip_reason or"native gameplay live weapon restoration refused")end
-                    local verified,why=Passport.verify_equipment(row.recipe,passport_env(row))
-                    if verified~=true then fail(why or"native gameplay equipment differs from authority")end;row.stage="possess"
+                    row.stage="post_setup"
                 elseif row.stage=="possess"then
                     local possessed,why=guarded(require_api("native_gameplay_finish"),row.handle)
+                    if possessed==false and why=="native gameplay initialization remains pending"then row.stage="post_setup";return nil,PENDING end
                     if possessed~=true then fail(why or"native gameplay possession refused")end;row.stage="post_equipment"
                 elseif row.stage=="post_equipment"then
                     local verified,why=Passport.verify_equipment(row.recipe,passport_env(row))

@@ -946,6 +946,8 @@ struct InitializationFixture {
 };
 InitializationFixture* initialization_fixture{};int initialization_calls{};int32_t initialization_answer{1};
 bool initialization_mutate{},initialization_wrong_target{};
+bool initialization_finish_guard_loss{};
+void initialization_finish_close_guard(){require(!initialization_finish_guard_loss,"native source/world operation guard changed");}
 int32_t initialization_native_count(const void* manager,uint64_t weak){
     ++initialization_calls;initialization_wrong_target=manager!=initialization_fixture->manager.data()||weak!=initialization_fixture->weak;
     if(initialization_mutate)InitializationFixture::write(initialization_fixture->manager,0x34,int32_t{1});return initialization_answer;
@@ -985,6 +987,43 @@ void gameplay_initialization_checks(){
     rejects([&]{gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,inaccessible);},"unreadable original manager allocation refuses");check(initialization_calls==0,"unreadable storage never reaches native traversal");
     const auto previous_lookup=active_lookup;LookupState nested;active_lookup=&nested;HsmpViewResult refused{};uint32_t unwritten=UINT32_MAX;
     check(gameplay_initialized(0,nullptr,&unwritten,&refused)==-1&&unwritten==UINT32_MAX&&!refused.complete,"callback-nested initializer refuses before locking or writing a completed count");active_lookup=previous_lookup;
+    storage.reset();initialization_answer=1;initialization_calls=0;
+    uint32_t finish_stage=2;HsmpViewResult finish_result{};int finish_mutations{},finish_closures{};std::vector<int> finish_order;
+    const auto finish_count=[&]{finish_order.push_back(1);return query();};
+    const auto finish_close=[&]{++finish_closures;finish_order.push_back(2);};
+    const auto finish_mutate=[&]{++finish_mutations;finish_order.push_back(3);finish_stage=3;};
+    check(!gameplay_finish_initialization(finish_stage,&finish_result,finish_count,finish_close,finish_mutate)&&finish_result.complete==1&&
+        std::strcmp(finish_result.reason,"native gameplay initialization remains pending")==0&&finish_stage==2&&finish_mutations==0&&finish_closures==1&&finish_order==std::vector<int>({1,2,1}),
+        "qualified pending finish closes originals and repeats fresh count without possession/input/HUD/stage mutation");
+    initialize_result(&finish_result);finish_order.clear();
+    check(!gameplay_finish_initialization(finish_stage,&finish_result,finish_count,finish_close,finish_mutate)&&initialization_calls==4&&finish_stage==2&&finish_mutations==0,
+        "another pending finish performs both native count queries again without caching a pending admission");
+    InitializationFixture::write(storage.actions,0x34,int32_t{2});initialization_answer=0;initialize_result(&finish_result);finish_order.clear();
+    check(gameplay_finish_initialization(finish_stage,&finish_result,finish_count,finish_close,finish_mutate)&&finish_stage==3&&finish_mutations==1&&!finish_result.complete&&finish_order==std::vector<int>({1,3,1}),
+        "fresh zero admits finish mutation once and repeats the existing post-mutation count without premature complete proof");
+    finish_stage=2;initialize_result(&finish_result);finish_order.clear();
+    bool late_pending_refused{};
+    try{gameplay_finish_initialization(finish_stage,&finish_result,finish_count,finish_close,[&]{finish_mutate();InitializationFixture::write(storage.actions,0x34,int32_t{1});initialization_answer=1;});}
+    catch(const std::exception& error){late_pending_refused=std::strcmp(error.what(),"native gameplay initialization became pending after finish mutation")==0;}
+    check(late_pending_refused&&finish_stage==3&&finish_mutations==2&&!finish_result.complete&&finish_order==std::vector<int>({1,3,1}),
+        "a positive post-mutation count remains fatal and cannot become a retryable stage2 pending result");
+    finish_stage=2;initialize_result(&finish_result);finish_order.clear();const auto previous_finish_mutations=finish_mutations;
+    initialization_finish_guard_loss=true;
+    rejects([&]{gameplay_finish_initialization(finish_stage,&finish_result,finish_count,initialization_finish_close_guard,finish_mutate);},
+        "original closure guard loss refuses a pending finish");
+    initialization_finish_guard_loss=false;initialization_finish_close_guard();
+    check(finish_stage==2&&finish_mutations==previous_finish_mutations&&!finish_result.complete&&finish_order==std::vector<int>({1}),
+        "failed pending closure performs no second count or finish mutation and publishes no pending success");
+    initialize_result(&finish_result);finish_order.clear();
+    rejects([&]{gameplay_finish_initialization(finish_stage,&finish_result,finish_count,[&]{finish_close();InitializationFixture::write(storage.actions,0x34,int32_t{2});initialization_answer=0;},finish_mutate);},
+        "zero after the final pending closure cannot publish an unproved positive count");
+    check(finish_stage==2&&finish_mutations==previous_finish_mutations&&!finish_result.complete&&finish_order==std::vector<int>({1,2,1}),
+        "a changed pending return remains unmutated and incomplete");
+    storage.reset();initialization_answer=1;initialize_result(&finish_result);finish_order.clear();
+    rejects([&]{gameplay_finish_initialization(finish_stage,&finish_result,finish_count,[&]{finish_close();InitializationFixture::write(storage.actions,0x34,int32_t{0});initialization_answer=2;},finish_mutate);},
+        "a different positive pending count after original closure cannot publish the first count as an admission");
+    check(finish_stage==2&&finish_mutations==previous_finish_mutations&&!finish_result.complete&&finish_order==std::vector<int>({1,2,1}),
+        "positive-to-different-positive recount refusal preserves stage2 and performs no finish mutation");
     initialization_fixture=nullptr;
 }
 void skeletal_checks(HsmpReflect& reflect){

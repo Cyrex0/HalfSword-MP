@@ -927,6 +927,20 @@ int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,
         gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);entry.stage=2;*pawn=entry.pawn;result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
+// A qualified pending result exists only before the first finish mutation.
+// Once mutation starts, a later pending count is a fatal partial finish.
+template<class Count,class Close,class Mutate>
+bool gameplay_finish_initialization(uint32_t& stage,HsmpViewResult* result,Count count,Close close,Mutate mutate){
+    require(stage==2,"native gameplay initialization stage");
+    const auto pending=count();
+    if(pending>0){
+        close();require(stage==2,"native gameplay initialization stage changed before pending return");
+        require(count()==pending,"native gameplay initialization changed before pending return");
+        std::snprintf(result->reason,sizeof(result->reason),"%s","native gameplay initialization remains pending");result->complete=1;return false;
+    }
+    mutate();
+    require(count()==0,"native gameplay initialization became pending after finish mutation");return true;
+}
 int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
@@ -934,7 +948,9 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
     gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
-        require(gameplay_initialization_count(entry)==0,"native gameplay initialization remains pending");
+        const auto count=[&]{return gameplay_initialization_count(entry);};
+        const auto close=[&]{lookup_finish();gameplay_pure(entry);if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);};
+        if(!gameplay_finish_initialization(entry.stage,result,count,close,[&]{
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
             require(same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)&&same(object_property(entry.pawn,L"Controller"),entry.controller),"native gameplay possession readback failed");}
         else require(!object_property(entry.pawn,L"Controller").weak,"native gameplay remote pawn unexpectedly possessed");
@@ -947,7 +963,7 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         // Discover immutable gear metadata during generation-bound preparation.
         // Every application still captures and verifies its own fresh values.
         gameplay_tick_disabled(entry.pawn,result);
-        require(gameplay_initialization_count(entry)==0,"native gameplay initialization remains pending");
+        }))return 0;
         gameplay_weapons_prepare(handle,result);lookup_finish();gameplay_pure(entry);
         if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
     }catch(const std::exception& error){gameplay_weapons_config_discard(handle);failure(result,error.what());return -1;}

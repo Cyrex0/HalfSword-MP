@@ -164,6 +164,35 @@ fn initialization_query(
     // constructed/finished flags, application proof or original receipt.
     Ok(pending)
 }
+const INITIALIZATION_PENDING: &str = "native gameplay initialization remains pending";
+fn finish_status(
+    ok: i32,
+    result: &ResultInfo,
+    failure: &GuardFailureLatch,
+    valid: impl FnOnce() -> bool,
+) -> Result<bool, String> {
+    let pending = ok == 0 && result.complete == 1 && result.reason() == INITIALIZATION_PENDING;
+    if result.complete != 1 || (ok != 1 && !pending) {
+        return Err(failure.stage_error(&result.reason()));
+    }
+    if !valid() || (pending && failure.0.get().is_some()) {
+        return Err(failure.stage_error("native source/world operation guard changed"));
+    }
+    // Status zero is the native pre-mutation observation only. It does not
+    // finish the original pawn or publish any application/readiness proof.
+    Ok(!pending)
+}
+unsafe fn finish_output(L: *mut lua_State, finished: bool) -> c_int {
+    unsafe {
+        lua_pushboolean(L, i32::from(finished));
+        if finished {
+            1
+        } else {
+            push_str(L, INITIALIZATION_PENDING);
+            2
+        }
+    }
+}
 struct Pawn {
     handle: u64,
     scene: GameplayScene,
@@ -895,7 +924,7 @@ impl Native {
     unsafe fn gameplay_stage(&mut self, L: *mut lua_State, stage: u8, scalar: bool) -> c_int {
         unsafe {
             let top = lua_gettop(L);
-            let result = (|| -> Result<(), String> {
+            let result = (|| -> Result<c_int, String> {
                 let handle = arg_int(L, 1).filter(|v| *v > 0).ok_or("gameplay handle")? as u64;
                 let pawn = self
                     .native_host
@@ -923,7 +952,16 @@ impl Native {
                     1 => (p.construct)(handle, &context.ffi(), &mut object, &mut r),
                     _ => (p.finish)(handle, &context.ffi(), &mut r),
                 };
-                let admitted = if ok != 1 || r.complete != 1 || !context.valid() {
+                if stage == 2 {
+                    let finished = finish_status(ok, &r, &context.failure, || context.valid())?;
+                    let outputs = finish_output(L, finished);
+                    if !finished {
+                        return Ok(outputs);
+                    }
+                }
+                let admitted = if stage == 2 {
+                    Ok(object)
+                } else if ok != 1 || r.complete != 1 || !context.valid() {
                     Err(context.failure.stage_error(&r.reason()))
                 } else {
                     Ok(object)
@@ -934,12 +972,10 @@ impl Native {
                     })? {
                         lua_pushboolean(L, 1);
                     }
-                } else {
+                } else if stage == 1 {
                     let object = admitted?;
                     lua_pushboolean(L, 1);
-                    if stage == 1 {
-                        wrapper(L, p, handle, &mut context, object)?;
-                    }
+                    wrapper(L, p, handle, &mut context, object)?;
                 }
                 if let Some(pawn) = self
                     .native_host
@@ -955,16 +991,10 @@ impl Native {
                         pawn.finished = true;
                     }
                 }
-                Ok(())
+                Ok(if stage == 1 { 2 } else { 1 })
             })();
             match result {
-                Ok(()) => {
-                    if stage == 1 {
-                        2
-                    } else {
-                        1
-                    }
-                }
+                Ok(outputs) => outputs,
                 Err(e) => {
                     lua_settop(L, top);
                     nil_err(L, &e)
@@ -1362,6 +1392,118 @@ mod tests {
         );
         assert_eq!(failure.0.get(), None);
         assert_eq!(failure.stage_error(""), "gameplay stage: ");
+    }
+    fn finish_result(complete: u32, reason: &str) -> ResultInfo {
+        let mut result = ResultInfo {
+            complete,
+            ..ResultInfo::default()
+        };
+        result.reason[..reason.len()].copy_from_slice(reason.as_bytes());
+        result
+    }
+    #[test]
+    fn finish_pending_is_exact_complete_premutation_status_with_original_guard() {
+        let scene = scene_fixture();
+        let received = scene.received;
+        let original = scene.result.clone();
+        let guards = Cell::new(0);
+        let failure = GuardFailureLatch::default();
+        for (ok, reason, expected) in [(0, INITIALIZATION_PENDING, false), (1, "", true)] {
+            assert_eq!(
+                finish_status(ok, &finish_result(1, reason), &failure, || {
+                    guards.set(guards.get() + 1);
+                    true
+                })
+                .unwrap(),
+                expected
+            );
+        }
+        assert_eq!(
+            guards.get(),
+            2,
+            "each successful status qualifies the original context once"
+        );
+        assert_eq!(scene.received, received);
+        assert!(Arc::ptr_eq(&scene.result, &original));
+        assert!(
+            State::default().applied.is_none(),
+            "pending status creates no application/ACK proof"
+        );
+        for (ok, complete, reason) in [
+            (-1, 1, INITIALIZATION_PENDING),
+            (0, 0, INITIALIZATION_PENDING),
+            (0, 1, ""),
+            (
+                0,
+                1,
+                "native gameplay initialization became pending after finish mutation",
+            ),
+            (
+                0,
+                1,
+                "native gameplay initialization remains pending; unknown=1",
+            ),
+            (2, 1, INITIALIZATION_PENDING),
+        ] {
+            assert!(
+                finish_status(ok, &finish_result(complete, reason), &failure, || {
+                    panic!(
+                        "incomplete/unknown/partial native failure cannot qualify a pending retry"
+                    )
+                })
+                .is_err()
+            );
+        }
+    }
+    #[test]
+    fn finish_pending_refuses_original_context_loss_or_previously_latched_failure() {
+        for first in [
+            GuardFailure::OriginalAdmission,
+            GuardFailure::Generation,
+            GuardFailure::Panic,
+        ] {
+            let failure = GuardFailureLatch::default();
+            assert_eq!(
+                finish_status(
+                    0,
+                    &finish_result(1, INITIALIZATION_PENDING),
+                    &failure,
+                    || { failure.refuse(first) }
+                )
+                .unwrap_err(),
+                failure.stage_error("native source/world operation guard changed")
+            );
+            assert_eq!(failure.0.get(), Some(first));
+            assert!(
+                finish_status(
+                    0,
+                    &finish_result(1, INITIALIZATION_PENDING),
+                    &failure,
+                    || true
+                )
+                .is_err(),
+                "a later successful check cannot convert an earlier original failure into a retry"
+            );
+        }
+    }
+    #[test]
+    fn finish_lua_output_preserves_false_pending_pair_and_true_finished_result() {
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            assert!(!L.is_null());
+            for finished in [false, true] {
+                lua_settop(L, 0);
+                let outputs = finish_output(L, finished);
+                assert_eq!(outputs, if finished { 1 } else { 2 });
+                assert_eq!(lua_gettop(L), outputs);
+                assert_eq!(lua_type(L, 1), LUA_TBOOLEAN);
+                assert_eq!(lua_toboolean(L, 1) != 0, finished);
+                if !finished {
+                    assert_eq!(arg_str(L, 2).as_deref(), Some(INITIALIZATION_PENDING));
+                }
+            }
+            mlua::ffi::lua_close(L.cast());
+        }
     }
     #[test]
     fn guard_panic_and_incomplete_without_failed_predicate_are_never_expiry() {

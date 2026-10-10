@@ -2,6 +2,45 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actuald03e5ed3 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Standard194743-073c65 reaches native readiness and both clients pass
+construction plus initialization-query admission. C1 (own entity2, first row
+remote) fails its first finish at25.782s, with initialization remains pending;
+the call takes3ms. Lua can only enter equipment after native count0, so queued
+work is present again after that observation. The identical error at the two
+finish checksites does not identify whether it precedes control mutations or
+follows them. No LIVE/inputs/weapon batch/model/HUD pixels. Secondary placement
+PASS; all four original processes absent,20 save hashes unchanged,no dumps or
+children. Existing unchanged full gear proof remains; no RF recurrence can be
+claimed resolved because the warm batch has not yet been reached.
+
+Next correction separates post-equipment initialization waiting and a fresh
+gear readback from final finish. Native finish may report a typed pending result
+only before any control/input/HUD/preparation mutation, after fresh original
+closure with stage2 unchanged. Later pending remains a distinct fatal refusal,
+so a partial stage3 is never replayed. Rust/Lua must recognize only the exact
+native pending contract, retain loading, and advance no finished/readiness state.
+No repeated gear restoration, new actor adoption or receipt renewal. Original
+65s startup and250ms receipt bounds remain unchanged. Implementation in progress.
+
+Cooked primary closure supports legitimate post-restoration queues: Right Hand
+setup calls GripJustChanged, scheduling RetriggerableDelay1s UUID197436054;
+Armor calls ApplyVertexPaint, scheduling Delay0 UUID1070298803 and later
+UUID-1393012250, and IsGrabbed can schedule .5s UUID-390267104. Exact call/graph
+references are retained in test-results/native-initialization-proof-20261010/
+post-restoration-cooked-latents.md. The actual failed run did not identify a UUID,
+so these are proved possible native routes, not attribution of that sample.
+Lua1318/loading74 and Rust19 focused PASS. The strict production provider builds;
+native fixture compilation exposed C4702 from an always-throw test instantiation,
+which must be corrected without disabling strict warnings. Native pending closure
+must also retain and freshly compare the same positive count within the call.
+Both corrections are now complete: a runtime-controlled ordinary guard function
+exercises refusal/reset without unreachable-code suppression, and a1-to2 pending
+count change refuses before any finish mutation. Strict production/fixture build
+and native2252 focused PASS. All cross-reviews CLOSED; Lua1318/loading74 and
+Rust19 remain PASS. The seven-file candidate is frozen for full G0/exact deploy
+and another actual standard run. No native combat/body/release acceptance claim.
+
 Actual574a6d49 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
 deployed. First190335-b8960d run fails startup before native readiness, with no
 weapon evidence. The same-build190634-ebf737 retry reaches native preparation:

@@ -47,7 +47,11 @@ local function fixture()
         if f.setup_count~=nil then return f.setup_count end
         return 0
     end
-    N.native_gameplay_finish=function(handle)f.calls[#f.calls+1]="possess"..handle;return true end
+    N.native_gameplay_finish=function(handle)
+        f.calls[#f.calls+1]="possess"..handle
+        if f.finish_result~=nil then return f.finish_result,f.finish_reason end
+        return true
+    end
     N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";f.clock=f.clock+20;return true,f.applied_scene or scene end
     N.native_gameplay_weapons=function(scene)
         f.batch_count=(f.batch_count or 0)+1
@@ -104,7 +108,7 @@ local function fixture()
             f.progress[#f.progress+1]=stage
         end,fname=function(name)return name end})
     function f:bootstrap()
-        for _=1,14 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
+        for _=1,16 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
     end
     function f:detail()
         self.probe_detail=true
@@ -133,8 +137,8 @@ do
     check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="equipment"and f.armor==0 and f.weapons==0,
         "exact zero count advances only the next yielded equipment stage")
     f.game:apply(f.scene)
-    check(f.armor==1 and f.weapons==1 and f.equipment==1 and f.game.rows[1].stage=="possess"and f.apply_count==0 and f.confirmed==0,
-        "authority gear restoration runs only on the separate iteration after native setup completed")
+    check(f.armor==1 and f.weapons==1 and f.equipment==0 and f.game.rows[1].stage=="post_setup"and f.apply_count==0 and f.confirmed==0,
+        "authority gear restoration runs once then yields pending before fresh post-restoration setup proof")
 end
 do
     local f=setup_fixture();f.setup_error="original pending action query refused"
@@ -168,6 +172,68 @@ do
     local f=setup_fixture();f.setup_count=1;f.game:apply(f.scene);f.scene.generation="g9";f.game:sync(f.scene)
     check(f.clears==1 and f.game.key==nil and #f.game.rows==0 and f.armor==0,
         "generation replacement closes pending original native setup before a new binding can be adopted")
+end
+local function post_setup_fixture()
+    local f=setup_fixture();f.game:apply(f.scene);f.game:apply(f.scene)
+    check(f.game.rows[1].stage=="post_setup"and f.armor==1 and f.weapons==1 and f.equipment==0,
+        "restored authority gear enters a separate fresh native setup wait")
+    return f
+end
+do
+    local f=post_setup_fixture();f.setup_count=3;local original=f.game.rows[1].handle
+    for _=1,2 do
+        local ok,why=f.game:apply(f.scene)
+        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
+            f.armor==1 and f.weapons==1 and f.equipment==0 and f.confirmed==0 and f.apply_count==0 and #f.actions==0,
+            "new native actions after restoration wait without repeating gear, adopting another pawn, or finishing")
+    end
+    f.setup_count=0;local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==Gameplay.PENDING and f.equipment==1 and f.game.rows[1].stage=="possess"and
+        f.calls[#f.calls]=="gear1"and f.armor==1 and f.weapons==1,
+        "fresh post-setup zero proves all equipment before yielding the separate finish iteration")
+    f.finish_result=false;f.finish_reason="native gameplay initialization remains pending"
+    ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
+        f.armor==1 and f.weapons==1 and f.equipment==1 and f.confirmed==0 and f.apply_count==0 and not f.game.ready,
+        "typed pre-mutation native finish pending returns to original post-setup verification without restoration or readiness")
+    f.setup_count=2
+    for _=1,2 do
+        ok,why=f.game:apply(f.scene)
+        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
+            f.armor==1 and f.weapons==1 and f.equipment==1 and f.confirmed==0 and f.apply_count==0 and not f.game.ready,
+            "queued native work after late finish pending waits without rereading unsettled gear or restoring it again")
+    end
+    f.setup_count=0;f.game:apply(f.scene)
+    check(f.game.rows[1].stage=="possess"and f.equipment==2 and f.calls[#f.calls]=="gear1"and f.armor==1 and f.weapons==1,
+        "every finish retry is preceded by fresh complete gear proof after the original native setup reaches zero")
+    f.finish_result=nil;f.game:apply(f.scene);f.game:apply(f.scene)
+    check(f.game.cursor==2 and f.equipment==3 and f.armor==1 and f.weapons==1 and f.calls[#f.calls]=="gear1",
+        "later native finish success still requires complete post-possession gear readback")
+end
+do
+    local f=post_setup_fixture();f.gear_error="original post-setup weapon changed";local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.gear_error and f.game.rows[1].stage=="post_setup"and f.calls[#f.calls]=="gear1"and f.confirmed==0,
+        "changed gear after native setup refuses before possession instead of rebaseline or restoration")
+end
+for _,reply in ipairs({{false,"other native finish refusal"},{true,"native gameplay initialization remains pending"}})do
+    local f=post_setup_fixture();f.game:apply(f.scene);f.finish_result,f.finish_reason=reply[1],reply[2]
+    local ok,why=f.game:apply(f.scene)
+    if reply[1]==false then
+        check(ok==nil and why==reply[2]and f.game.rows[1].stage=="possess","unrelated false native finish remains fatal")
+    else
+        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_equipment","true native finish preserves success semantics even with a diagnostic second value")
+    end
+end
+do
+    local f=post_setup_fixture();f.game:apply(f.scene)
+    f.native.native_gameplay_finish=function()return nil,"native gameplay initialization remains pending"end
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay initialization remains pending"and f.game.rows[1].stage=="possess"and not f.game.ready,
+        "nil native finish with pending text remains a failure rather than typed pending")
+    f.native.native_gameplay_finish=function()return nil,"native gameplay initialization became pending after finish mutation"end
+    ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay initialization became pending after finish mutation"and f.armor==1 and f.weapons==1,
+        "native pending after mutation remains fatal with its distinct original reason")
 end
 do
     local f=fixture();f:bootstrap();f:detail();f.scene.state=2;f.scene.gameplay_proof=true
@@ -257,9 +323,9 @@ for _,state in ipairs({1,2})do
 end
 do
     local f=fixture();f:bootstrap()
-    check(table.concat(f.progress,",")=="present,character,present,native_setup,equipment,controls,check_equipment,present,character,present,native_setup,equipment,controls,check_equipment",
+    check(table.concat(f.progress,",")=="present,character,present,native_setup,equipment,native_setup,controls,check_equipment,present,character,present,native_setup,equipment,native_setup,controls,check_equipment",
         "each yielded native preparation step reports its actual work stage")
-    check(table.concat(f.calls,",")=="begin1,passport1,construct1,initialized1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,initialized2,armor2,weapons2,gear2,possess2,gear2","native construction/completed initialization/live armor/weapons/gear/possession order including post-possession proof")
+    check(table.concat(f.calls,",")=="begin1,passport1,construct1,initialized1,armor1,weapons1,initialized1,gear1,possess1,gear1,begin2,passport2,construct2,initialized2,armor2,weapons2,initialized2,gear2,possess2,gear2","native construction/completed initialization/live armor/weapons/post-setup proof/possession order including post-possession proof")
     check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
     check(f.scalar_guards>0 and f.wrappers>0,"discarded guards use explicit scalar admission while actual getters retain full wrappers")
     f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
