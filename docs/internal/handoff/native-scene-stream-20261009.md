@@ -2,6 +2,30 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+The next copied provenance diagnostic stores first deterministic original path
+source/row/own/depth when constructing the existing plan. Only an already-failed
+RF predicate reports those values and scalar membership in current gameplay
+pawns, with original full64 names/flags and explicit availability. No additional
+native query, pointer output, mask, rebinding or success log. Strict provider
+compile and focused weapons167 PASS; independent review CLOSED. The first new fixture failed because it
+mutated an Outer while reusing an earlier lookup operation; a fresh seeded test
+lookup isolates that scenario and preserves all production witness checks.
+Full G0/exact deployment and actual provenance observation remain pending.
+
+Actuald732bf1f full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Standard184318-07d658 FAILS before LIVE: C1's first warm batch refuses
+copied object/path_node RF00000008 to40000008 (Garbage), name7ffff97f00061fd1,
+class0000000000061fd1. Phase0 is822us; Lua native_apply70210us,
+weapon_batch1480us, total72698us. Main gameplay apply has already succeeded;
+the weapon plan contains only copied configuration paths. No harmless flag
+transition is established. Source audit finds no explicit destroy in apply,
+and fatal cleanup follows the initial refusal. Cooked hand setup sets Owner=self;
+temporary generator weapons have Owner=None and are explicitly destroyed. The
+failed node is not identified by exact actor text. Copied path provenance is the
+next bounded diagnostic; no RF mask, rebinding, adoption or renewed receipt.
+No LIVE/inputs/model/HUD pixels. Independent cleanup fourabsent/save20unchanged,
+nodumps/children; earlysecondaryplacementPASS. Actual evidence and summary saved.
+
 Actual83d656b5 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
 deployed. Standard183008-bc2d98 FAILS before LIVE. Both clients finish native
 preparation and reach apply; C1's first warm weapon batch refuses original object

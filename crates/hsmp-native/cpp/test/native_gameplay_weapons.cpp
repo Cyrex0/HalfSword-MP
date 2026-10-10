@@ -178,21 +178,45 @@ void cold_path_cases(){
     schema.chain={&passport_field};schema.fields={bound};WeaponBoundaryPlan plan;plan.schema(schema);plan.schema(schema);
     check(plan.fields.size()==1&&plan.chains.size()==1&&plan.schemas.size()==1,"agreeing full metadata and chains are deduplicated without new observations");
     field_name_reads=0;plan.validate();plan.validate();check(field_name_reads==2,"two fresh passes read each unique typed field once per pass");
-    const auto rf_case=[&](ColdObject& object,uint32_t flags,const char* kind,const char* role,const char* scalar,bool missing){
+    const auto rf_case=[&](ColdObject& object,uint32_t flags,const char* kind,const char* source,const char* scalar,bool missing){
         const auto original=object.flags;object.flags=flags;cold_metadata_trap=&object;cold_rf_missing=missing?&object:nullptr;cold_invalid_metadata_reads=0;cold_target_rf_reads=0;
         bool refused{};try{plan.validate();}catch(const Error& error){const std::string reason=error.what();refused=true;
-            check(reason.find(std::string("native weapon original ")+kind+" RF changed; kind="+kind+" role="+role)!=std::string::npos,"RF diagnostic preserves original kind/refusal and fixed copied role");
+            check(reason.find(std::string("native weapon original ")+kind+" RF changed; src="+source+" row=-1 own=-1 depth=0 pawn=0")!=std::string::npos,"RF diagnostic preserves original kind/refusal and first copied path provenance");
             char copied_name[32]{},copied_class[32]{};std::snprintf(copied_name,sizeof(copied_name),"name=%016llx",static_cast<unsigned long long>(object.name));std::snprintf(copied_class,sizeof(copied_class),"class=%016llx",static_cast<unsigned long long>(type.name));
             check(reason.find(scalar)!=std::string::npos&&reason.find(copied_name)!=std::string::npos&&reason.find(copied_class)!=std::string::npos&&reason.find("class_avail=1")!=std::string::npos&&reason.size()<192,"RF diagnostic copies expected/current scalar and all64 name/class bits within result bound");}
         check(refused&&cold_invalid_metadata_reads==0&&cold_target_rf_reads==1,"RF failure performs one original getter and no postfailure name/class/Outer query");
         object.flags=original;cold_metadata_trap=nullptr;cold_rf_missing=nullptr;
     };
     rf_case(owner,1,"object","schema","rf=00000000/00000001 avail=1",false);
-    rf_case(type,1,"class","path_node","rf=00000000/00000001 avail=1",false);
+    rf_case(type,1,"class","schema","rf=00000000/00000001 avail=1",false);
     rf_case(owner,0x40000000u,"object","schema","rf=00000000/40000000 avail=1",false);
-    rf_case(type,0x40000000u,"class","path_node","rf=00000000/40000000 avail=1",false);
+    rf_case(type,0x40000000u,"class","schema","rf=00000000/40000000 avail=1",false);
     rf_case(owner,0,"object","schema","rf=00000000/00000000 avail=0",true);
     plan.validate();check(true,"restored original metadata still passes unchanged RF predicate");
+    // Exercise the production snapshot constructor's tags, including a
+    // weapon Owner ancestor that is not one of the current owned pawns.
+    LookupState provenance_lookup;provenance_lookup.world=level_lookup.world;provenance_lookup.gi=level_lookup.gi;
+    provenance_lookup.world_node=level_lookup.world_node;provenance_lookup.gi_node=level_lookup.gi_node;provenance_lookup.gi_property=level_lookup.gi_property;
+    const auto previous_lookup=active_lookup;active_lookup=&provenance_lookup;
+    WeaponProperty provenance_property;provenance_property.owner_path=owner_path;provenance_property.prefix={&passport_field};provenance_property.field=bound;
+    WeaponRosterSnapshot provenance;provenance.schema=schema;provenance.vector=schema;provenance.color=schema;provenance.class_path=class_path;
+    WeaponPawnSnapshot provenance_row;provenance_row.own=1;provenance_row.world_path=weapon_path_pure(&world);provenance_row.controller_path=provenance_row.world_path;provenance_row.pawn_path=weapon_path_pure(&class_b);provenance_row.properties.fill(provenance_property);provenance.pawns.push_back(provenance_row);
+    WeaponActor provenance_actor;provenance_actor.path=owner_path;provenance_actor.bound=true;provenance_actor.owner={cold_weak(&class_a),reinterpret_cast<uint64_t>(&class_a)};
+    class_a.outer=&gi;provenance_actor.owner_path=weapon_path_pure(&class_a);provenance_actor.level_path=provenance_row.world_path;provenance_actor.owner_level_path=provenance_row.world_path;
+    provenance_actor.actor_class_path=class_path;provenance_actor.get_owner_path=class_path;provenance_actor.passport=provenance_property;provenance_actor.owner_field=provenance_property;provenance_actor.world_field=provenance_property;provenance_actor.owner_world_field=provenance_property;provenance.actors.push_back(provenance_actor);
+    HsmpGameplayWeaponPassport provenance_output{};provenance.output.push_back(provenance_output);WeaponBoundaryPlan provenance_plan(provenance);
+    GameplayPawn current_original;current_original.pawn={cold_weak(&class_b),reinterpret_cast<uint64_t>(&class_b)};gameplay_pawns.emplace(19,current_original);
+    const auto provenance_case=[&](ColdObject& object,const char* expected){
+        object.flags=0x40000000u;cold_metadata_trap=&object;cold_target_rf_reads=0;cold_invalid_metadata_reads=0;bool refused{};
+        try{provenance_plan.validate();}catch(const Error& error){refused=true;const std::string reason=error.what();check(reason.find(expected)!=std::string::npos&&reason.find("rf=00000000/40000000 avail=1")!=std::string::npos&&reason.find("class_avail=1")!=std::string::npos&&reason.size()<192,"failed original plan reports copied path row/role/depth and scalar current-pawn membership");}
+        check(refused&&cold_target_rf_reads==1&&cold_invalid_metadata_reads==0,"provenance performs no getter after original RF refusal");object.flags=0;cold_metadata_trap=nullptr;
+    };
+    provenance_case(class_b,"src=pawn row=0 own=1 depth=0 pawn=1");
+    provenance_case(class_a,"src=weapon_owner row=0 own=1 depth=0 pawn=0");
+    provenance_case(gi,"src=weapon_owner row=0 own=1 depth=1 pawn=0");
+    const auto first_origin=provenance_plan.origins.at(reinterpret_cast<uint64_t>(&class_a));provenance_plan.path(provenance_actor.owner_path,"later",31,0);
+    check(std::string(first_origin.source)=="weapon_owner"&&std::string(provenance_plan.origins.at(reinterpret_cast<uint64_t>(&class_a)).source)=="weapon_owner","agreeing duplicate path keeps first deterministic provenance without changing strict witness merge");
+    class_a.outer=nullptr;gameplay_pawns.erase(19);active_lookup=previous_lookup;
     rejects([&](){weapon_boundary_passes(plan,[&](){owner.name^=1;});},"actual second metadata pass catches original mutation during raw-link span");owner.name^=1;
     passport_field.flags^=1;rejects([&](){plan.validate();},"next native boundary refuses a field flags mutation");passport_field.flags^=1;
     passport_field.dimension=2;rejects([&](){plan.validate();},"next native boundary refuses original ArrayDim mutation");passport_field.dimension=1;

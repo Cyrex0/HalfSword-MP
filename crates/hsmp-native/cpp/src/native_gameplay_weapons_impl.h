@@ -310,43 +310,51 @@ struct WeaponConfiguration {
 };
 struct WeaponLookupScope {LookupState* previous{active_lookup};explicit WeaponLookupScope(LookupState& state){active_lookup=&state;}~WeaponLookupScope(){active_lookup=previous;}};
 struct WeaponChain {LookupEntry owner;std::vector<void*> fields;bool complete{};};
-[[noreturn]] void weapon_rf_failure(const char* kind,const char* role,uint32_t expected,uint32_t actual,bool available,uint64_t name_bits,uint64_t class_bits,bool class_available){
+struct WeaponOrigin {const char* source{"path_node"};int32_t row{-1},own{-1},depth{-1};};
+[[noreturn]] void weapon_rf_failure(const char* kind,WeaponOrigin origin,bool current_pawn,uint32_t expected,uint32_t actual,bool available,uint64_t name_bits,uint64_t class_bits,bool class_available){
     // Called only after the original RF predicate has failed. Every value is
     // copied from that getter or the original expectation; no UObject query.
-    char reason[192]{};std::snprintf(reason,sizeof(reason),"native weapon original %s RF changed; kind=%s role=%s rf=%08x/%08x avail=%u name=%016llx class=%016llx class_avail=%u",
-        kind,kind,role,expected,actual,static_cast<unsigned>(available),static_cast<unsigned long long>(name_bits),static_cast<unsigned long long>(class_bits),static_cast<unsigned>(class_available));throw Error(reason);
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"native weapon original %s RF changed; src=%s row=%d own=%d depth=%d pawn=%u rf=%08x/%08x avail=%u name=%016llx class=%016llx class_avail=%u",
+        kind,origin.source,origin.row,origin.own,origin.depth,static_cast<unsigned>(current_pawn),expected,actual,static_cast<unsigned>(available),static_cast<unsigned long long>(name_bits),static_cast<unsigned long long>(class_bits),static_cast<unsigned>(class_available));throw Error(reason);
 }
 struct WeaponBoundaryPlan {
     const LookupState* operation{active_lookup};
-    LookupState metadata;std::map<uint64_t,WeaponField> fields;std::map<uint64_t,WeaponChain> chains;std::map<uint64_t,WeaponSchema> schemas;bool owner_code{};
+    LookupState metadata;std::map<uint64_t,WeaponField> fields;std::map<uint64_t,WeaponChain> chains;std::map<uint64_t,WeaponSchema> schemas;std::map<uint64_t,WeaponOrigin> origins;bool owner_code{};
     WeaponBoundaryPlan()=default;
-    void path(const LookupEntry& p){if(!p.original.empty()){WeaponLookupScope scope(metadata);lookup_record(p);}}
-    void chain(const LookupEntry& p,const std::vector<void*>& expected,bool complete){
-        path(p);require(!p.pinned.empty(),"native weapon original chain owner missing");const auto address=p.pinned.front().address;
+    void path(const LookupEntry& p,const char* source="path_node",int32_t row=-1,int32_t own=-1){if(!p.original.empty()){WeaponLookupScope scope(metadata);lookup_record(p);
+        for(size_t i=0;i<p.original.size();++i){const auto& node=p.original[i];const WeaponOrigin origin{source,row,own,static_cast<int32_t>(i)};
+            origins.emplace(node.address,origin);origins.emplace(node.class_address,origin);}}}
+    void chain(const LookupEntry& p,const std::vector<void*>& expected,bool complete,const char* source="field_owner",int32_t row=-1,int32_t own=-1){
+        path(p,source,row,own);require(!p.pinned.empty(),"native weapon original chain owner missing");const auto address=p.pinned.front().address;
         auto [saved,inserted]=chains.emplace(address,WeaponChain{p,expected,complete});if(inserted)return;
         auto& old=saved->second;const auto count=std::min(old.fields.size(),expected.size());
         require(std::equal(old.fields.begin(),old.fields.begin()+count,expected.begin()),"native weapon original chain expectations disagree");
         require((!old.complete||expected.size()<=old.fields.size())&&(!complete||old.fields.size()<=expected.size()),"native weapon original chain cardinality disagrees");
         if(expected.size()>old.fields.size()){old.fields=expected;old.owner=p;}old.complete=old.complete||complete;
     }
-    void field(const WeaponField& f){
-        path(f.declared_path);auto [saved,inserted]=fields.emplace(reinterpret_cast<uint64_t>(f.pointer),f);if(inserted)return;
+    void field(const WeaponField& f,int32_t row=-1,int32_t own=-1){
+        path(f.declared_path,"declared_type",row,own);auto [saved,inserted]=fields.emplace(reinterpret_cast<uint64_t>(f.pointer),f);if(inserted)return;
         const auto& old=saved->second;require(weapon_field_same(old,f)&&old.alignment==f.alignment&&old.alignment_slot==f.alignment_slot&&old.alignment_target==f.alignment_target&&old.alignment_code==f.alignment_code,"native weapon original field expectations disagree");
     }
-    void property(const WeaponProperty& p){chain(p.owner_path,p.prefix,false);field(p.field);}
+    void property(const WeaponProperty& p,const char* source="field_owner",int32_t row=-1,int32_t own=-1){chain(p.owner_path,p.prefix,false,source,row,own);field(p.field,row,own);}
     void schema(const WeaponSchema& s){
-        chain(s.path,s.chain,true);auto [saved,inserted]=schemas.emplace(s.object.address,s);if(!inserted)require(saved->second.size==s.size&&saved->second.padded_size==s.padded_size&&saved->second.alignment==s.alignment,"native weapon original schema expectations disagree");
+        chain(s.path,s.chain,true,"schema");auto [saved,inserted]=schemas.emplace(s.object.address,s);if(!inserted)require(saved->second.size==s.size&&saved->second.padded_size==s.padded_size&&saved->second.alignment==s.alignment,"native weapon original schema expectations disagree");
         for(const auto& f:s.fields)field(f);
     }
     explicit WeaponBoundaryPlan(const WeaponRosterSnapshot& snapshot){
-        schema(snapshot.schema);schema(snapshot.vector);schema(snapshot.color);path(snapshot.class_path);
-        for(const auto& row:snapshot.pawns){path(row.world_path);path(row.pawn_path);path(row.controller_path);for(const auto& p:row.properties)property(p);}
-        for(const auto& a:snapshot.actors){path(a.path);if(!a.bound)continue;owner_code=true;path(a.level_path);path(a.actor_class_path);path(a.get_owner_path);
-            property(a.passport);property(a.owner_field);property(a.world_field);if(a.owner.weak){path(a.owner_path);path(a.owner_level_path);property(a.owner_world_field);}for(const auto& p:a.classes)path(p);}
+        schema(snapshot.schema);schema(snapshot.vector);schema(snapshot.color);path(snapshot.class_path,"class_type");
+        for(size_t i=0;i<snapshot.pawns.size();++i){const auto& row=snapshot.pawns[i];const auto index=static_cast<int32_t>(i),own=static_cast<int32_t>(row.own);
+            path(row.world_path,"world",index,own);path(row.pawn_path,"pawn",index,own);path(row.controller_path,"controller",index,own);for(const auto& p:row.properties)property(p,"alias_prop",index,own);}
+        for(size_t i=0;i<snapshot.actors.size();++i){const auto& a=snapshot.actors[i];const int32_t row=i<snapshot.output.size()&&snapshot.output[i].pawn_index<snapshot.pawns.size()?static_cast<int32_t>(snapshot.output[i].pawn_index):-1;
+            const int32_t own=row>=0?static_cast<int32_t>(snapshot.pawns[static_cast<size_t>(row)].own):-1;
+            path(a.path,"weapon",row,own);if(!a.bound)continue;owner_code=true;path(a.level_path,"weapon_level",row,own);path(a.actor_class_path,"actor_class",row,own);path(a.get_owner_path,"owner_api",row,own);
+            property(a.passport,"passport",row,own);property(a.owner_field,"owner_prop",row,own);property(a.world_field,"world_prop",row,own);
+            if(a.owner.weak){path(a.owner_path,"weapon_owner",row,own);path(a.owner_level_path,"owner_level",row,own);property(a.owner_world_field,"owner_world",row,own);}for(const auto& p:a.classes)path(p,"class_leaf",row,own);}
     }
-    const char* rf_role(uint64_t address,const LookupObjectWitness* object)const{
-        if(schemas.find(address)!=schemas.end())return "schema";if(chains.find(address)!=chains.end())return "field_owner";
-        if(object&&metadata.witnesses.package&&object->node.class_name==*metadata.witnesses.package&&object->outer==0)return "package";return "path_node";
+    [[noreturn]] void rf_failure(const char* kind,uint64_t address,uint32_t expected,uint32_t actual,bool available,uint64_t name_bits,uint64_t class_bits,bool class_available)const{
+        const auto found=origins.find(address);const auto origin=found==origins.end()?WeaponOrigin{}:found->second;bool current_pawn{};
+        for(const auto& [handle,entry]:gameplay_pawns){(void)handle;current_pawn=current_pawn||entry.pawn.address==address;}
+        weapon_rf_failure(kind,origin,current_pawn,expected,actual,available,name_bits,class_bits,class_available);
     }
     void validate()const{
         require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native weapon original metadata unavailable");const auto& witnesses=metadata.witnesses;
@@ -354,11 +362,11 @@ struct WeaponBoundaryPlan {
         for(const auto& [address,saved]:witnesses.classes){auto* p=vt->resolve(saved.object.weak);require(saved.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native weapon original class expired");
             const auto* flags=retirement_flags(p);const uint32_t current=flags?*flags:0;
             if(!flags||current!=saved.flags||(current&0x40000000u)!=0){const auto object=witnesses.objects.find(address);const auto* copied=object==witnesses.objects.end()?nullptr:&object->second;
-                weapon_rf_failure("class",rf_role(address,copied),saved.flags,current,flags!=nullptr,saved.name,copied?copied->node.class_name:0,copied!=nullptr);}const auto* n=object_name(p);
+                rf_failure("class",address,saved.flags,current,flags!=nullptr,saved.name,copied?copied->node.class_name:0,copied!=nullptr);}const auto* n=object_name(p);
             require(n&&*n==saved.name&&(!saved.exact_serial||vt->weak(p)==saved.object.weak),"native weapon original class identity changed");}
         for(const auto& [address,saved]:witnesses.objects){const auto& n=saved.node;auto* p=n.weak?vt->resolve(n.weak):lookup_zero_object(saved.zero_item,address);
             require(reinterpret_cast<uint64_t>(p)==address,"native weapon original object expired");const auto* flags=retirement_flags(p);const uint32_t current=flags?*flags:0;
-            if(!flags||current!=saved.flags||(current&0x40000000u)!=0)weapon_rf_failure("object",rf_role(address,&saved),saved.flags,current,flags!=nullptr,n.name,n.class_name,true);
+            if(!flags||current!=saved.flags||(current&0x40000000u)!=0)rf_failure("object",address,saved.flags,current,flags!=nullptr,n.name,n.class_name,true);
             const auto* name_value=object_name(p);const auto* outer=source_outer(p);require(name_value&&*name_value==n.name&&vt->class_of(p)==reinterpret_cast<void*>(n.class_address)&&outer&&reinterpret_cast<uint64_t>(*outer)==saved.outer,"native weapon original object path changed");
             if(!n.weak)require(n.class_name==*source_package_name&&saved.outer==0&&lookup_zero_object(saved.zero_item,address)==p,"native weapon original zero Package changed");}
         // Owner paths precede borrowed-chain reads; original pointer equality
