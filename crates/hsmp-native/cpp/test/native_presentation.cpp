@@ -175,7 +175,7 @@ struct PresentProfileRecord {uint64_t value{};uint32_t attempt{},complete{},buck
 std::vector<PresentProfileRecord> present_profile_records;bool present_profile_outside{};
 void record_present_profile(const char* stage,uint32_t complete,uint64_t value,uint32_t attempt,uint32_t bucket,uint32_t,uint32_t,const char*){
     bool unlocked=mirror_mutex.try_lock();if(unlocked)mirror_mutex.unlock();
-    present_profile_outside=present_profile_outside&&unlocked&&!active_guard&&!active_lookup&&!active_capture_trace&&!present_provider_active;
+    present_profile_outside=present_profile_outside&&unlocked&&!active_guard&&!active_lookup&&!active_capture_trace&&!present_provider_active&&!present_extra;
     present_profile_records.push_back({value,attempt,complete,bucket,stage});
 }
 void present_profile_checks(HsmpReflect& reflect){
@@ -189,16 +189,20 @@ void present_profile_checks(HsmpReflect& reflect){
             if(attempt<2){check(trace.enabled&&active_capture_trace==&trace.row,"warm profiler installs only its stack-owned counter row");
                 {PresentProviderTrace nested;nested.begin(true);check(!nested.enabled,"nested provider work cannot consume or replace the original profiler");}
                 profile_tick(0);profile_tick(2);profile_tick(3);trace.row.us[5]=123;
+                get(keep(&old_world));property(keep(&old_world),L"OwningGameInstance",L"ObjectProperty",8);
+                {Function cold_or_cached(L"/Script/Engine.Actor:GetLevel");Function cached(L"/Script/Engine.Actor:GetLevel");}
+                check(trace.extra.count[0]==1&&trace.extra.count[1]>0&&trace.extra.count[2]==attempt+1,"actual property/get/cached Function paths populate the three private body counters");
                 if(attempt==1)throw Error("profile unwind");trace.complete=true;
             }else check(!trace.enabled,"third warm application is outside the fixed two-attempt diagnostic budget");
         }catch(const Error&){}
         if(attempt<2){PresentProviderTrace finish(true);const std::lock_guard lock(mirror_mutex);OperationScope scope(&guard,keep(&old_world));finish.begin(true);check(finish.enabled,"pending warm application permits one matching aggregate finish profile");
-            check(finish.row.guards==0&&finish.row.finds==0&&finish.row.events==0,"matching finish starts with fresh counters after success or failure unwind");finish.complete=true;}
+            check(finish.row.guards==0&&finish.row.finds==0&&finish.row.events==0&&finish.extra.count==std::array<uint64_t,3>{},"matching finish starts with fresh counters after success or failure unwind");finish.complete=true;}
     }
-    check(present_profile_records.size()==44&&present_apply_profile_attempts==2&&present_finish_profile_attempts==2,"two warm applies and matching finishes emit a fixed bounded copied profile");
+    check(present_profile_records.size()==68&&present_apply_profile_attempts==2&&present_finish_profile_attempts==2,"two warm applies and matching finishes emit at most68 fixed copied scalar profile lines");
     check(present_profile_outside&&!present_provider_active&&!active_capture_trace,"all profile logging occurs after guard/cache/TLS and provider mutex unwind");
-    check(present_profile_records[0].complete==1&&present_profile_records[22].complete==0,"success and failure completion remain distinct in bounded profiler output");
-    check(present_profile_records[8].value==1&&present_profile_records[9].value==1&&present_profile_records[10].value==1,"existing guard/find/PE counter hooks populate the warm stack-owned record");
+    check(present_profile_records[0].complete==1&&present_profile_records[34].complete==0,"success and failure completion remain distinct in bounded profiler output");
+    check(present_profile_records[8].value>0&&present_profile_records[9].value>0&&present_profile_records[10].value==1,"existing guard/find/PE counter hooks populate the warm stack-owned record");
+    check(present_profile_records[12].stage=="present_extra_count"&&present_profile_records[12].value==1&&present_profile_records[14].value>0&&present_profile_records[16].value==1,"private timers emit their exact actual call counts without including cold Function construction");
     hsmp_presentation_set_create_log(nullptr);present_finish_pending=false;
 }
 void create_trace_checks(HsmpReflect& reflect){

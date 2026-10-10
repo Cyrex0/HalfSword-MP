@@ -87,8 +87,20 @@ std::atomic<HsmpPresentationCreateLog> create_logger{};
 thread_local bool present_provider_active{};
 thread_local uint32_t present_apply_profile_attempts{},present_finish_profile_attempts{};
 thread_local bool present_finish_pending{};
+struct PresentExtraCounters {std::array<uint64_t,3> us{},count{};};
+thread_local PresentExtraCounters* present_extra{};
+struct PresentExtraTimer {
+    PresentExtraCounters* owner{};uint32_t index{};bool enabled{};
+    std::chrono::steady_clock::time_point start{};
+    explicit PresentExtraTimer(uint32_t bucket,bool activate=true):owner(present_provider_active?present_extra:nullptr),index(bucket){
+        if(owner){start=std::chrono::steady_clock::now();if(activate)enable();}
+    }
+    void enable(){if(owner&&!enabled){enabled=true;++owner->count[index];}}
+    ~PresentExtraTimer(){if(enabled)owner->us[index]+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());}
+};
 struct PresentProviderTrace {
     HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{};
+    PresentExtraCounters extra{};PresentExtraCounters* previous_extra{};
     bool enabled{},complete{},aggregate{};uint32_t attempt{};
     std::chrono::steady_clock::time_point start{};
     explicit PresentProviderTrace(bool finish=false):aggregate(finish){}
@@ -97,13 +109,13 @@ struct PresentProviderTrace {
         auto& attempts=aggregate?present_finish_profile_attempts:present_apply_profile_attempts;
         if(attempts>=2||(aggregate&&!present_finish_pending))return;
         attempt=++attempts;enabled=true;start=std::chrono::steady_clock::now();previous=active_capture_trace;
-        active_capture_trace=&row;present_provider_active=true;
+        active_capture_trace=&row;previous_extra=present_extra;present_extra=&extra;present_provider_active=true;
         if(aggregate)present_finish_pending=false;else present_finish_pending=true;
     }
     ~PresentProviderTrace(){
         if(!enabled)return;
         row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());
-        active_capture_trace=previous;present_provider_active=false;
+        active_capture_trace=previous;present_extra=previous_extra;present_provider_active=false;
         // Declared before provider locks/scopes: only copied scalars remain here.
         if(const auto logger=create_logger.load()){
             const auto label=aggregate?"finish":"apply";
@@ -111,6 +123,8 @@ struct PresentProviderTrace {
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.guards,attempt,0,0,0,label);
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.finds,attempt,1,0,0,label);
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.events,attempt,2,0,0,label);
+            for(uint32_t bucket=0;bucket<3;++bucket){logger("present_extra_us",complete?1u:0u,extra.us[bucket],attempt,bucket,0,0,label);
+                logger("present_extra_count",complete?1u:0u,extra.count[bucket],attempt,bucket,0,0,label);}
         }
     }
 };
@@ -237,6 +251,7 @@ Obj keep(void* p) {
 }
 void* get(Obj o) {
     check_guard();
+    PresentExtraTimer present_identity_time(1);
     void* p = vt->resolve(o.weak);
     require(o.weak && p && reinterpret_cast<uint64_t>(p) == o.address, "native object expired");
     const auto existing=identities.find(o.weak);
@@ -259,7 +274,9 @@ Obj asset(HsmpViewText path, const wchar_t* cls) {
 bool same(Obj a, Obj b) { return a.weak == b.weak && a.address == b.address; }
 HsmpProp property(Obj o, const wchar_t* key, const wchar_t* type, int size) {
     HsmpProp p{};
-    require(vt->obj_prop(get(o), u16(key), &p) == 1, "native object property missing");
+    void* object=get(o);int32_t found{};
+    {PresentExtraTimer present_property_time(0);found=vt->obj_prop(object,u16(key),&p);}
+    require(found==1, "native object property missing");
     require(p.cls == name(type) && p.size == size && p.offset >= 0 && p.offset < 65536,
             "native object property layout");
     return p;
@@ -310,9 +327,11 @@ struct Function {
     alignas(16) std::array<uint8_t,4096> buf{};
     uint32_t create_id{};char create_name[64]{};
     Function(const wchar_t* path) {
+        PresentExtraTimer present_signature_time(2,false);
         if(active_create_trace){create_id=create_function_id(path);create_function_name(path,create_name,sizeof(create_name));}
         auto existing=signatures.find(path);
         if(existing!=signatures.end()) {
+            present_signature_time.enable();
             get(existing->second.function);get(existing->second.cls);
             function=existing->second.function;cls=existing->second.cls;fields=existing->second.fields;return;
         }

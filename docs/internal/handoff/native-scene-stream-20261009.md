@@ -1,5 +1,27 @@
 # Native full-scene encoding checkpoint
 
+## Actual6733e739: whole warm presentation roughly halves, still stale
+
+Exact fullG0/dev/all394 normal014140-46a600, source4ab96e5b-c850-4347-b94f-
+902988b3b3db/auth5040/c45832/46372. All16 warm totals515,588–591,281us vs prior
+983–1529ms, actual separate-run gain, not normalized benchmark. Instrumented
+permirror applies223–242ms/meshproof70–99ms/guard73–102ms; alloriginal counts
+remain185,143guards/3,462PEs and finish74,215guards/354PEs. Finish roughly97–130ms.
+Every warm attempt still entersfresh/exitsstale postapply; original250ms retained.
+Standardfalse/activeboth0/ownedview unproved. CleanupPASS4absent/save20same/no
+dumps/unobservedchildren/bothsecondary. Retain measured improvement; attribute
+remaining apply/finish costs before another change. No playable or release claim.
+
+Remaining permirror apply~140–150ms lies outside measured guard time. Extend
+existing firsttwo warm profile with actual obj_prop metadata call, get identity
+body AFTER unchanged guard, and cached Function construction/signature copy.
+Function bucket is inclusive and excludes cold cache misses. Three CPP files,
+private counters/timers only, no query/API/ABI/guard change; max68 copied lines.
+Fixture executes actual helper paths and checks counts/reset/logging TLS. Actual
+attribution pending; no unsupported schema cache or admission batching yet.
+Strict provider/fixture and1,756 checks pass; independent instrumentation review
+closed. Existing bound/reset tests now assert68lines and actual helper counters.
+
 ## Actualb21c6c25: per-call mesh proof/table construction dominates
 
 Normal013151-58dedd/fullG0/dev/all394, sourcebbfe61b2-76e8-45fe-94fd-

@@ -1,5 +1,18 @@
 # Native authority bootstrap checkpoint
 
+## Actual6733e739: warm total516–591ms, not yetLIVE
+
+Normal014140-46a600/fullG0/dev/all394/auth5040/c45832/46372: sixteen wholewarm
+515588–591281us, roughlyhalf prior983–1529ms acrossactualruns. Alloriginalguard/
+PEcounts remain. Apply223–242ms/meshproof70–99ms,finish~97–130ms. Allpostapplystale,
+original250ms retained/standardfalse/activeboth0/ownedviewunproved. CleanupPASS
+4absent20savehashsame/nodumps/secondary. Retain gain, locate remaining cost.
+Bounded firsttwo warm profile now separates actual obj_prop/get identity after
+guard/cachedFunction inclusive constructioncopy, excluding cold misses. ThreeCPP
+files/private counters/max68copiedlines/noquery/ABI/guardchange. Actual pending.
+Strict provider/fixture1,756pass/instrumentationreviewclosed;actualhelpercounts
+and68line/resetbound covered. Exactbuild actual attribution next.
+
 ## Actualb21c6c25: mesh-proof construction measured
 
 Normal013151-58dedd/auth46628/c12672/35632/fullG0/dev/all394:185143guards permirror
