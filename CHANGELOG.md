@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Report the original object, role and expected/current flags when native weapon
+  metadata fails verification, using copied failure facts without extra object reads.
 - Prepare original weapon metadata during spawning, then freshly verify current
   gear values during gameplay without repeating cold discovery every update.
 - Consolidate agreeing shared weapon metadata checks within each native guard,

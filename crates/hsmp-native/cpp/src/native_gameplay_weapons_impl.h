@@ -310,6 +310,12 @@ struct WeaponConfiguration {
 };
 struct WeaponLookupScope {LookupState* previous{active_lookup};explicit WeaponLookupScope(LookupState& state){active_lookup=&state;}~WeaponLookupScope(){active_lookup=previous;}};
 struct WeaponChain {LookupEntry owner;std::vector<void*> fields;bool complete{};};
+[[noreturn]] void weapon_rf_failure(const char* kind,const char* role,uint32_t expected,uint32_t actual,bool available,uint64_t name_bits,uint64_t class_bits,bool class_available){
+    // Called only after the original RF predicate has failed. Every value is
+    // copied from that getter or the original expectation; no UObject query.
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"native weapon original %s RF changed; kind=%s role=%s rf=%08x/%08x avail=%u name=%016llx class=%016llx class_avail=%u",
+        kind,kind,role,expected,actual,static_cast<unsigned>(available),static_cast<unsigned long long>(name_bits),static_cast<unsigned long long>(class_bits),static_cast<unsigned>(class_available));throw Error(reason);
+}
 struct WeaponBoundaryPlan {
     const LookupState* operation{active_lookup};
     LookupState metadata;std::map<uint64_t,WeaponField> fields;std::map<uint64_t,WeaponChain> chains;std::map<uint64_t,WeaponSchema> schemas;bool owner_code{};
@@ -338,14 +344,21 @@ struct WeaponBoundaryPlan {
         for(const auto& a:snapshot.actors){path(a.path);if(!a.bound)continue;owner_code=true;path(a.level_path);path(a.actor_class_path);path(a.get_owner_path);
             property(a.passport);property(a.owner_field);property(a.world_field);if(a.owner.weak){path(a.owner_path);path(a.owner_level_path);property(a.owner_world_field);}for(const auto& p:a.classes)path(p);}
     }
+    const char* rf_role(uint64_t address,const LookupObjectWitness* object)const{
+        if(schemas.find(address)!=schemas.end())return "schema";if(chains.find(address)!=chains.end())return "field_owner";
+        if(object&&metadata.witnesses.package&&object->node.class_name==*metadata.witnesses.package&&object->outer==0)return "package";return "path_node";
+    }
     void validate()const{
         require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native weapon original metadata unavailable");const auto& witnesses=metadata.witnesses;
         require(!witnesses.package||*source_package_name==*witnesses.package,"native weapon original package changed");
         for(const auto& [address,saved]:witnesses.classes){auto* p=vt->resolve(saved.object.weak);require(saved.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native weapon original class expired");
-            const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native weapon original class RF changed");const auto* n=object_name(p);
+            const auto* flags=retirement_flags(p);const uint32_t current=flags?*flags:0;
+            if(!flags||current!=saved.flags||(current&0x40000000u)!=0){const auto object=witnesses.objects.find(address);const auto* copied=object==witnesses.objects.end()?nullptr:&object->second;
+                weapon_rf_failure("class",rf_role(address,copied),saved.flags,current,flags!=nullptr,saved.name,copied?copied->node.class_name:0,copied!=nullptr);}const auto* n=object_name(p);
             require(n&&*n==saved.name&&(!saved.exact_serial||vt->weak(p)==saved.object.weak),"native weapon original class identity changed");}
         for(const auto& [address,saved]:witnesses.objects){const auto& n=saved.node;auto* p=n.weak?vt->resolve(n.weak):lookup_zero_object(saved.zero_item,address);
-            require(reinterpret_cast<uint64_t>(p)==address,"native weapon original object expired");const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native weapon original object RF changed");
+            require(reinterpret_cast<uint64_t>(p)==address,"native weapon original object expired");const auto* flags=retirement_flags(p);const uint32_t current=flags?*flags:0;
+            if(!flags||current!=saved.flags||(current&0x40000000u)!=0)weapon_rf_failure("object",rf_role(address,&saved),saved.flags,current,flags!=nullptr,n.name,n.class_name,true);
             const auto* name_value=object_name(p);const auto* outer=source_outer(p);require(name_value&&*name_value==n.name&&vt->class_of(p)==reinterpret_cast<void*>(n.class_address)&&outer&&reinterpret_cast<uint64_t>(*outer)==saved.outer,"native weapon original object path changed");
             if(!n.weak)require(n.class_name==*source_package_name&&saved.outer==0&&lookup_zero_object(saved.zero_item,address)==p,"native weapon original zero Package changed");}
         // Owner paths precede borrowed-chain reads; original pointer equality

@@ -114,20 +114,22 @@ void schema_layout_cases(){
 struct ColdObject {uint64_t name{};ColdObject* cls{};const void* outer{};uint32_t flags{};void* head{};ColdObject* gi{};int32_t raw_size{249};int16_t alignment{8};uint16_t payload_padding{};std::array<uint8_t,256> payload{};};
 static_assert(offsetof(ColdObject,payload)%8==0,"synthetic passport payload preserves native alignment");
 std::vector<ColdObject*> cold_objects;ColdObject* cold_retired{};void* cold_poisoned_field{};int cold_stale_reads{},cold_field_reads{};
+ColdObject* cold_rf_missing{};ColdObject* cold_metadata_trap{};int cold_invalid_metadata_reads{},cold_target_rf_reads{};
 uint64_t cold_weak(void* p){for(size_t i=0;i<cold_objects.size();++i)if(cold_objects[i]==p)return p==cold_retired?0:(uint64_t(1)<<32)|(i+1);return 0;}
 void* cold_resolve(uint64_t w){const auto index=static_cast<uint32_t>(w);if((w>>32)!=1||index==0||index>cold_objects.size())return nullptr;auto* p=cold_objects[index-1];return p==cold_retired?nullptr:p;}
 void cold_live(const void* p){if(p==cold_retired){++cold_stale_reads;throw Error("fixture retired metadata touched");}}
-void* cold_class(void* p){cold_live(p);return static_cast<ColdObject*>(p)->cls;}
-const uint64_t* cold_name(const void* p){cold_live(p);return &static_cast<const ColdObject*>(p)->name;}
-const uint32_t* cold_rf(const void* p){cold_live(p);return &static_cast<const ColdObject*>(p)->flags;}
-const void* const* cold_outer(const void* p){cold_live(p);return &static_cast<const ColdObject*>(p)->outer;}
+void cold_metadata(const void* p){cold_live(p);if(p==cold_metadata_trap){++cold_invalid_metadata_reads;throw Error("fixture RF-failed metadata touched");}}
+void* cold_class(void* p){cold_metadata(p);return static_cast<ColdObject*>(p)->cls;}
+const uint64_t* cold_name(const void* p){cold_metadata(p);return &static_cast<const ColdObject*>(p)->name;}
+const uint32_t* cold_rf(const void* p){cold_live(p);if(p==cold_metadata_trap)++cold_target_rf_reads;return p==cold_rf_missing?nullptr:&static_cast<const ColdObject*>(p)->flags;}
+const void* const* cold_outer(const void* p){cold_metadata(p);return &static_cast<const ColdObject*>(p)->outer;}
 int32_t cold_is_a(void* p,void* cls){cold_live(p);cold_live(cls);return static_cast<ColdObject*>(p)->cls==cls?1:0;}
 void** cold_children(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->head;}
 int32_t* cold_size(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->raw_size;}
 int16_t* cold_alignment(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->alignment;}
 void* cold_next(void* p){if(p==cold_poisoned_field){++cold_field_reads;throw Error("fixture borrowed field touched");}return static_cast<MockProperty*>(p)->next;}
 void cold_path_cases(){
-    ColdObject type{1},world{2},gi{3},owner{4},class_a{5},class_b{6};type.cls=&type;
+    ColdObject type{(uint64_t(0xabcdef12)<<32)|1},world{2},gi{3},owner{(uint64_t(0x12345678)<<32)|4},class_a{5},class_b{6};type.cls=&type;
     for(auto* p:{&world,&gi,&owner,&class_a,&class_b})p->cls=&type;world.gi=&gi;
     cold_objects={&type,&world,&gi,&owner,&class_a,&class_b};cold_retired=nullptr;cold_stale_reads=0;cold_poisoned_field=nullptr;cold_field_reads=0;
     HsmpReflect reflect{};reflect.weak=cold_weak;reflect.resolve=cold_resolve;reflect.class_of=cold_class;reflect.is_a=cold_is_a;vt=&reflect;
@@ -176,6 +178,21 @@ void cold_path_cases(){
     schema.chain={&passport_field};schema.fields={bound};WeaponBoundaryPlan plan;plan.schema(schema);plan.schema(schema);
     check(plan.fields.size()==1&&plan.chains.size()==1&&plan.schemas.size()==1,"agreeing full metadata and chains are deduplicated without new observations");
     field_name_reads=0;plan.validate();plan.validate();check(field_name_reads==2,"two fresh passes read each unique typed field once per pass");
+    const auto rf_case=[&](ColdObject& object,uint32_t flags,const char* kind,const char* role,const char* scalar,bool missing){
+        const auto original=object.flags;object.flags=flags;cold_metadata_trap=&object;cold_rf_missing=missing?&object:nullptr;cold_invalid_metadata_reads=0;cold_target_rf_reads=0;
+        bool refused{};try{plan.validate();}catch(const Error& error){const std::string reason=error.what();refused=true;
+            check(reason.find(std::string("native weapon original ")+kind+" RF changed; kind="+kind+" role="+role)!=std::string::npos,"RF diagnostic preserves original kind/refusal and fixed copied role");
+            char copied_name[32]{},copied_class[32]{};std::snprintf(copied_name,sizeof(copied_name),"name=%016llx",static_cast<unsigned long long>(object.name));std::snprintf(copied_class,sizeof(copied_class),"class=%016llx",static_cast<unsigned long long>(type.name));
+            check(reason.find(scalar)!=std::string::npos&&reason.find(copied_name)!=std::string::npos&&reason.find(copied_class)!=std::string::npos&&reason.find("class_avail=1")!=std::string::npos&&reason.size()<192,"RF diagnostic copies expected/current scalar and all64 name/class bits within result bound");}
+        check(refused&&cold_invalid_metadata_reads==0&&cold_target_rf_reads==1,"RF failure performs one original getter and no postfailure name/class/Outer query");
+        object.flags=original;cold_metadata_trap=nullptr;cold_rf_missing=nullptr;
+    };
+    rf_case(owner,1,"object","schema","rf=00000000/00000001 avail=1",false);
+    rf_case(type,1,"class","path_node","rf=00000000/00000001 avail=1",false);
+    rf_case(owner,0x40000000u,"object","schema","rf=00000000/40000000 avail=1",false);
+    rf_case(type,0x40000000u,"class","path_node","rf=00000000/40000000 avail=1",false);
+    rf_case(owner,0,"object","schema","rf=00000000/00000000 avail=0",true);
+    plan.validate();check(true,"restored original metadata still passes unchanged RF predicate");
     rejects([&](){weapon_boundary_passes(plan,[&](){owner.name^=1;});},"actual second metadata pass catches original mutation during raw-link span");owner.name^=1;
     passport_field.flags^=1;rejects([&](){plan.validate();},"next native boundary refuses a field flags mutation");passport_field.flags^=1;
     passport_field.dimension=2;rejects([&](){plan.validate();},"next native boundary refuses original ArrayDim mutation");passport_field.dimension=1;

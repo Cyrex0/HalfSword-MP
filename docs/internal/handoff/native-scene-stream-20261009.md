@@ -2,6 +2,26 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual83d656b5 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Standard183008-bc2d98 FAILS before LIVE. Both clients finish native
+preparation and reach apply; C1's first warm weapon batch refuses original object
+RF changed in phase0 (634us). C2's batch refuses source/world operation guard
+changed after110152us; its cause is not established. C1 READY native_apply83715us,
+weapon_batch1382us, total86974us; C2 native_apply59147us, weapon_batch110777us,
+total170930us. These failed samples do not establish successful warm cost.
+No LIVE/inputs/model/HUD pixels. No startupheap recurrence. Early secondary
+placementPASS; independent cleanup confirms all four original processes absent,
+20 unchanged save hashes and no dumps/children. Summary and bounded rows saved.
+
+The next narrow diagnostic preserves the exact RF predicate and original error
+prefix while appending static kind/role, copied expected/current RF with explicit
+availability, and original full64 name/class-name witnesses. It reads current RF
+once through the existing getter, with no postfailure name/class/Outer access,
+mask, rebaseline, replacement adoption or success logging. Strict production and
+native2187/weapons160 PASS; independent review CLOSED. Actual changed object and
+bits must be measured before selecting a lifecycle correction. Original65s
+startup/250ms receipt remain unchanged; no release/completion claim.
+
 Next candidate prepares native weapon metadata inside the existing generation-
 bound final-finish operation before its unchanged lookup/pawn/UI pure tail.
 Explicit construct/finish/clear/discard invalidate configuration; begin/reset
