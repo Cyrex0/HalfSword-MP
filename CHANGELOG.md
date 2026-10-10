@@ -32,6 +32,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   retaining original actor checks and complete equipment readback.
 - Reduce repeated native current calls through qualified, freshly checked local
   controller and world predicates, retaining fallback for unsupported states.
+- Share duplicate path expectations within each native pawn guard operation,
+  while freshly checking original metadata and possession at every boundary.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

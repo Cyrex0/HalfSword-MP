@@ -2,6 +2,33 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual aa7ad853 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
+standard Gameplay064450-95feb3 BOTH ready/live with native source input dispatch.
+Bounded timing closes first cause: client2 nativeapply17.004ms returns original
+receipt age80.9334ms, full gear169.662ms, confirm24us refuses stale. Original
+applied receipt therefore crosses250ms in full equipment verification; the tiny
+confirm duration rules out expensive confirmation on this failure. Client1 later
+generation-change during gear is secondary to client2 refusal. Other sampled
+successful full gear costs100–130ms; do not use this as a stable latency bound.
+Next safe structural full-gear reader/batch must retain every captured field,
+alias/original object/world admission and final callbackfree original receipt
+proof; no cached admission, gear omission, expiry increase or receipt renewal.
+Early original windows secondaryPASS. Sky observation failed after clients exited
+(foreground process ID unavailable); no model-pixel claim. CleanupPASS/four
+absent/save20 unchanged/no dumps/no unobserved children. Complete bounded timing
+and source dispatch counts retained in native_operator_summary.json. Observation
+gate FAILS; no full gameplay/co-op/release completion claim.
+Current-only candidate frozen/review CLOSED: each provider.current invocation
+copies strict merged original/pinned unique path expectations into an operation-
+owned plan. Every existing guard boundary freshly checks full metadata, all
+same-world original Level/OwningWorld/reciprocal possession links, then metadata
+again. Original RF/FName/weak/address/class/Outer/private Package serial rules
+remain; no successful validation ticket, cross-call cache or TMap reader.
+Original native code/vslot/local-byte/legacy fallback and final callback closure
+remain. Full Lua armor/weapon/alias verification and exact250ms receipt unchanged.
+Strict CPP production and targeted existing lifetime/rejection fixture1822 PASS.
+Actual per-live gear timing benefit unproved; fullG0/deploy/actual run next.
+
 Actual d26c85b8 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
 standard Gameplay062332-00cfc3 BOTH MirrorReady then LIVE. First8 current calls
 per original client all hot/positive_branch/PE0,32–95us, actual ByteMask1. This

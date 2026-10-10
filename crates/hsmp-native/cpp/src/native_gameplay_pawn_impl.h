@@ -109,7 +109,83 @@ void gameplay_current_paths(const GameplayPawn& entry){
     void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+profile.level_world.offset,8);
     require(reinterpret_cast<uint64_t>(world)==entry.world.address,"native gameplay original controller world changed");
 }
+// A current invocation owns copied expectations only. Every existing pure
+// boundary still reads all original metadata and hard links afresh.
+struct GameplayBoundaryRow {
+    Obj world{},controller{},pawn{},level{},controller_level{};
+    HsmpProp level_world{},controller_world{},controller_pawn{},pawn_controller{};
+    uint32_t own{},stage{};bool current{};
+};
+struct GameplayBoundary {
+    LookupState* operation{active_lookup};std::optional<uint64_t> package;
+    std::vector<std::pair<uint64_t,LookupClassWitness>> classes;
+    std::vector<std::pair<uint64_t,LookupObjectWitness>> objects;
+    std::vector<GameplayBoundaryRow> rows;
+    explicit GameplayBoundary(const GameplayPawn& active){
+        LookupState collected;
+        struct RecordScope {LookupState* previous{active_lookup};explicit RecordScope(LookupState& state){active_lookup=&state;}~RecordScope(){active_lookup=previous;}} record(collected);
+        const auto add=[&](const GameplayPawn& entry){
+            lookup_record(entry.world_path);lookup_record(entry.controller_path);lookup_record(entry.pawn_path);
+            GameplayBoundaryRow row{entry.world,entry.controller,entry.pawn,entry.level,{},entry.level_world,{},entry.controller_pawn,entry.pawn_controller,entry.own,entry.stage,false};
+            if(entry.current){const auto& current=*entry.current;
+                lookup_record(current.level_path);lookup_record(current.get_level_path);lookup_record(current.local_path);
+                row.controller_level=current.controller_level;row.controller_world=current.level_world;row.current=true;}
+            rows.push_back(row);
+        };
+        bool retained{};
+        for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,active.world)){add(entry);retained=retained||&entry==&active;}}
+        if(!retained)add(active);
+        require(rows.size()<=32,"native gameplay original current roster bound");
+        package=collected.witnesses.package;
+        classes.assign(collected.witnesses.classes.begin(),collected.witnesses.classes.end());
+        objects.assign(collected.witnesses.objects.begin(),collected.witnesses.objects.end());
+    }
+    void metadata()const{
+        require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native gameplay shared metadata unavailable");
+        require(!package||*source_package_name==*package,"native gameplay shared package changed");
+        for(const auto& [address,saved]:classes){void* p=vt->resolve(saved.object.weak);
+            require(saved.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native gameplay shared class expired");
+            const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native gameplay shared class RF changed");
+            const auto* n=object_name(p);require(n&&*n==saved.name&&(!saved.exact_serial||vt->weak(p)==saved.object.weak),"native gameplay shared class identity changed");}
+        for(const auto& [address,saved]:objects){const auto& node=saved.node;
+            void* p=node.weak?vt->resolve(node.weak):lookup_zero_object(saved.zero_item,address);
+            require(reinterpret_cast<uint64_t>(p)==address,"native gameplay shared object expired");
+            const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native gameplay shared object RF changed");
+            const auto* n=object_name(p);const auto* outer=source_outer(p);
+            require(n&&*n==node.name&&vt->class_of(p)==reinterpret_cast<void*>(node.class_address)&&outer&&reinterpret_cast<uint64_t>(*outer)==saved.outer,"native gameplay shared original path changed");
+            if(!node.weak)require(node.class_name==*source_package_name&&saved.outer==0&&lookup_zero_object(saved.zero_item,address)==p,"native gameplay shared zero Package changed");}
+        require(!package||*source_package_name==*package,"native gameplay shared package changed during proof");
+    }
+    void final()const{
+        metadata();
+        for(const auto& row:rows){
+            const auto* pawn=vt->resolve(row.pawn.weak);const auto* pc=vt->resolve(row.controller.weak);const auto* level=vt->resolve(row.level.weak);
+            require(reinterpret_cast<uint64_t>(pawn)==row.pawn.address&&reinterpret_cast<uint64_t>(pc)==row.controller.address&&reinterpret_cast<uint64_t>(level)==row.level.address,"native gameplay original raw link receiver expired");
+            const auto* outer=source_outer(pawn);require(outer&&reinterpret_cast<uint64_t>(*outer)==row.level.address,"native gameplay original level changed");
+            void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+row.level_world.offset,8);
+            require(reinterpret_cast<uint64_t>(world)==row.world.address,"native gameplay original world changed");
+            if(row.current){const auto* controller_level=vt->resolve(row.controller_level.weak);
+                require(reinterpret_cast<uint64_t>(controller_level)==row.controller_level.address,"native gameplay original controller level expired");
+                const auto* controller_outer=source_outer(pc);require(controller_outer&&reinterpret_cast<uint64_t>(*controller_outer)==row.controller_level.address,"native gameplay original controller level changed");
+                std::memcpy(&world,static_cast<const uint8_t*>(controller_level)+row.controller_world.offset,8);
+                require(reinterpret_cast<uint64_t>(world)==row.world.address,"native gameplay original controller world changed");}
+            if(row.stage>=3&&row.own){void* owned{};void* controller{};
+                std::memcpy(&owned,static_cast<const uint8_t*>(pc)+row.controller_pawn.offset,8);
+                std::memcpy(&controller,static_cast<const uint8_t*>(pawn)+row.pawn_controller.offset,8);
+                require(reinterpret_cast<uint64_t>(owned)==row.pawn.address&&reinterpret_cast<uint64_t>(controller)==row.controller.address,"native gameplay original possession changed");}
+        }
+        metadata();
+    }
+};
+thread_local const GameplayBoundary* gameplay_boundary{};
+bool gameplay_boundary_active(){return gameplay_boundary&&gameplay_boundary->operation==active_lookup;}
+struct GameplayBoundaryScope {
+    const GameplayBoundary* previous{gameplay_boundary};GameplayBoundary boundary;
+    explicit GameplayBoundaryScope(const GameplayPawn& entry):boundary(entry){gameplay_boundary=&boundary;}
+    ~GameplayBoundaryScope(){gameplay_boundary=previous;}
+};
 void gameplay_pure(const GameplayPawn& entry){
+    if(gameplay_boundary_active()){gameplay_boundary->final();return;}
     lookup_entry_final(entry.world_path);lookup_entry_final(entry.controller_path);lookup_entry_final(entry.pawn_path);
     const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
     const auto* outer=source_outer(pawn);require(outer&&reinterpret_cast<uint64_t>(*outer)==entry.level.address,"native gameplay original level changed");
@@ -173,6 +249,7 @@ void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
 }
 void gameplay_call_guard(){
     if(!gameplay_active)return;
+    if(gameplay_boundary_active()){gameplay_boundary->final();return;}
     for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,gameplay_active->world))gameplay_pure(entry);}
     gameplay_pure(*gameplay_active);
 }
@@ -224,7 +301,7 @@ int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Tr
 int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     GameplayCurrentTrace trace;
     const std::lock_guard lock(gameplay_mutex);
-    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayBoundaryScope boundary(entry);GameplayWatch watch(entry);
         trace.observation=entry.current_binding;trace.observation.cold_code=entry.current_binding.code;trace.observation.stage=entry.stage;trace.observation.reason=GP_CURRENT_WORLD;
         require(pawn!=nullptr,"native gameplay pawn output missing");uintptr_t image{};
         uint32_t code{};const bool code_supported=gameplay_current_code(image,&code);trace.observation.code=code;

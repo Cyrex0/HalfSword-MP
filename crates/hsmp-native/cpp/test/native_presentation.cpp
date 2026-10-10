@@ -1408,6 +1408,7 @@ void gameplay_readback_checks(){
 }
 struct GameplayCurrentRecord {uint32_t attempt{},complete{},operations{},stage{},reason{};std::string label;};
 std::vector<GameplayCurrentRecord> gameplay_current_records;bool gameplay_current_log_outside{};
+int gameplay_boundary_outer_reads{};
 void record_gameplay_current(const char* stage,uint32_t complete,uint64_t,uint32_t attempt,uint32_t operations,uint32_t pawn_stage,uint32_t reason,const char* label){
     bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
     gameplay_current_log_outside=gameplay_current_log_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active;
@@ -1452,6 +1453,43 @@ void gameplay_current_checks(HsmpReflect& reflect){
     controller->cls=&world_class;rejects([&]{gameplay_current_positive(entry,true,base);},"original controller class replacement refuses hot current");controller->cls=&actor_class;
     foreign_owner.alive=false;rejects([&]{gameplay_current_positive(entry,true,base);},"original pawn expiration refuses even with positive local controller");foreign_owner.alive=true;
     check(gameplay_current_positive(entry,true,base)&&level_calls==0,"next invocation repeats original qualification without native PE or validation ticket");
+    entry.stage=3;entry.own=1;entry.controller_pawn=entry.pawn_controller=object_field(L"Pawn",static_cast<int32_t>(offsetof(LifetimeObject,property)));
+    controller->property=&foreign_owner;foreign_owner.property=controller;
+    actor.outer=&level;auto other=entry;other.pawn=keep(&actor);other.pawn_path=gameplay_path(other.pawn);other.own=0;
+    gameplay_pawns.emplace(71,entry);gameplay_pawns.emplace(72,other);const auto& retained=gameplay_pawns.at(71);
+    object_name=shared_name;shared_package_names=0;gameplay_call_guard();
+    {GameplayBoundaryScope boundary(retained);GameplayWatch watch(retained);
+        check(gameplay_boundary_active()&&boundary.boundary.rows.size()==2,"current invocation compiles every original same-world pawn without duplicate active row");
+        shared_package_names=0;gameplay_call_guard();
+        check(shared_package_names==2,"current guard reads a shared original Package exactly once per fresh metadata pass");
+        shared_package_names=0;gameplay_call_guard();
+        check(shared_package_names==2,"next current guard repeats both fresh passes without a carried validation ticket");
+        for(int mutation=0;mutation<9;++mutation){
+            if(mutation==0)actor.name^=1;else if(mutation==1)actor.flags^=1;else if(mutation==2)actor_class.flags^=1;
+            else if(mutation==3)actor_class.name^=1;else if(mutation==4)actor.outer=&foreign_level;
+            else if(mutation==5)level.property=&new_world;else if(mutation==6)path_package_name^=1;
+            else if(mutation==7)controller->property=&actor;else foreign_owner.property=nullptr;
+            rejects([&]{gameplay_call_guard();},"current shared boundary refuses later original metadata/world/reciprocal possession changes");
+            if(mutation==0)actor.name^=1;else if(mutation==1)actor.flags^=1;else if(mutation==2)actor_class.flags^=1;
+            else if(mutation==3)actor_class.name^=1;else if(mutation==4)actor.outer=&level;
+            else if(mutation==5)level.property=&old_world;else if(mutation==6)path_package_name^=1;
+            else if(mutation==7)controller->property=&foreign_owner;else foreign_owner.property=controller;
+        }
+        auto bad=retained;bad.pawn_path.flags[0]^=1;
+        rejects([&]{GameplayBoundaryScope conflicting(bad);},"current plan refuses disagreeing copied original metadata before TLS publication");
+        check(gameplay_boundary==&boundary.boundary,"failed current plan compilation restores the original scope and active boundary");
+        {GameplayBoundaryScope nested(retained);check(gameplay_boundary==&nested.boundary,"nested current boundary owns independent copied expectations");gameplay_call_guard();}
+        check(gameplay_boundary==&boundary.boundary,"nested current boundary unwinds to the original plan");
+        auto* lookup=active_lookup;LookupState unrelated;active_lookup=&unrelated;
+        check(!gameplay_boundary_active(),"unrelated nested operation cannot reuse another current invocation's expectations");active_lookup=lookup;
+        const auto original_outer=source_outer;bool changed{};gameplay_boundary_outer_reads=0;
+        source_outer=+[](const void* p)->const void* const*{if(p==&actor&&++gameplay_boundary_outer_reads==2)actor_class.flags^=1;return lifetime_outer(p);};
+        rejects([&]{gameplay_call_guard();},"second fresh metadata pass catches earlier class change during later raw link reads");
+        changed=actor_class.flags!=0;actor_class.flags=0;source_outer=original_outer;
+        check(changed,"raw link mutation fixture exercised the actual boundary instead of prechanging the original");
+    }
+    check(!gameplay_boundary&&!gameplay_active,"current-only expectation scope leaves no retained plan after unwind");
+    gameplay_pawns.clear();object_name=lookup_name;entry.stage=1;entry.own=0;controller->property=nullptr;foreign_owner.property=nullptr;
     }
     gameplay_current_attempts.store(0);hsmp_presentation_set_create_log(nullptr);
     {GameplayCurrentTrace disabled;check(disabled.attempt==0&&gameplay_current_attempts.load()==0,"disabled current reporter consumes no bounded attempt");}
