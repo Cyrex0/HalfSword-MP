@@ -1,5 +1,42 @@
 # Native full-scene encoding checkpoint
 
+## Current priority: compact native gameplay and lossless compression
+
+The owner's API/RPC and compression steering supersedes further mirror metadata
+micro-optimizations. Implement capability-gated actions to the native authority,
+exact compact authoritative root/Health/Stamina results, and real client Willie
+pawns constructed from the complete source passports and local native assets.
+The initial slice must prove movement/Run, original possession, native gear and owned
+view/HUD; it does not establish limb injury, dismemberment or co-op parity.
+
+Independent LZ4 blocks retain original payload bits, bounded decode and a raw
+fallback for small/incompressible records. Codec's three focused Rust tests pass;
+ordered-input Lua suite passes382 assertions. Neither result establishes native
+gameplay or network capacity. Before a native run: complete independent review,
+commit, pre-push full G0 and exact RequireG0 deployment. Record actual packet bytes,
+encode/decode time, command execution ACKs, native pawn/view/HUD proof and cleanup.
+
+Focused compact server8 tests pass, including two authenticated UDP clients,
+compressed exact results, complete recipe bootstrap without RenderWorld,
+native-ready acknowledgement, ordered Run press/release and stale-receipt refusal.
+Provider2 Rust layout/type checks compile and pass; C++ provider object compile
+passes `/W4 /WX`. These are transport/implementation evidence only. Generic
+AHUD visibility does not yet establish Half Sword's actual stat widget bindings.
+
+## Actual830a1e0f: contiguous layout not enough; no recursive guard shortcut
+
+FullG0/dev/all394 normal021736-c902b3, sourceb48c86fe-5ec5-4471-9ff1-
+f48d2abe9120/auth25816/c47092/20732. All16 LIVE-state warm attempts exitstale;
+c2421–462ms/c1533–629ms. No adequate layout gain, standardfalse/activeboth0.
+CleanupPASS4absent/save20same/nodumps/unobservedchildren/bothsecondary. FullG0
+passes after deterministic resize fixture fix; no UI tolerance/runtime change.
+Bounded code audit finds NO recursive check_guard path in mesh validation or
+Rust callback. Counts are actual repeated OUTER get/property/Function reads;
+do not implement recursion suppression. Next primary proof must identify a
+specific callback-free metadata/argument-preparation block before any fresh
+entry/exit batching. Retain all original identity reads and EVERY callback/PE
+guard; do not infer purity from getter names or native duration alone.
+
 ## f1556483 G0 blocked by unrelated resize fixture substring
 
 CPP contiguous-plan compile/review1,764 pass, but fullG0Lua74/75 failed

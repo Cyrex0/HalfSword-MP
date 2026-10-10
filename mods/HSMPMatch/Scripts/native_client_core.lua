@@ -8,7 +8,7 @@ function M.new(env)
         self.reported_at=env.now()
     end
     local function clear_scope()
-        env.clear();self.scope=nil;self.binding=nil
+        self.scope=nil;self.binding=nil;env.clear()
     end
     local function waiting(reason,scene,own)
         if self.state~="wait_scene" or env.now()-self.reported_at>=1 then report("wait_scene",reason,scene,own)end
@@ -33,9 +33,9 @@ function M.new(env)
     function self:stop(reason)
         if self.stopped then return end
         self.stopped=true
-        clear_scope()
-        env.close()
-        report("stopped",reason)
+        local cleared,clear_reason=pcall(clear_scope)
+        local closed,close_reason=pcall(env.close)
+        report("stopped",reason or(not cleared and tostring(clear_reason))or(not closed and tostring(close_reason)))
     end
     function self:tick()
         if self.stopped then return false end
@@ -83,12 +83,14 @@ function M.new(env)
         if self.scope~=key then clear_scope();self.scope=key end
         self.binding={epoch=scene.epoch,dir_seq=scene.dir_seq,world=world.key}
         if scene.state==2 and scene.fresh~=true then return waiting("native applied scene is stale",scene,own)end
-        local applied,why=env.present()
+        local applied,why=env.present(scene)
         if applied~=true and why=="client mirror generation"then clear_scope();return waiting(why)end
-        if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale"or why=="native scene assets loading")then return waiting(why)end
+        if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale"or why=="native scene assets loading"or
+            (env.gameplay and (why=="native gameplay pawn preparing"or why=="native gameplay own native view target pending"or why=="native gameplay own camera manager pending")))then return waiting(why,scene,own)end
         if applied~=true then report("error",why or "source-complete mirror refused",scene,own);self:stop(why or "mirror refused");return false end
         if type(why)~="table"then self:stop("native applied scene unavailable");return false end
         scene=why
+        if env.gameplay and scene.gameplay_proof~=true then self:stop("native gameplay complete native proof unavailable");return false end
         local current_directory,current_world=env.directory(),env.world()
         if not current_directory or not current_world or not current_world.ready then return waiting("applied scene scope unavailable")end
         if current_directory.state==5 then self:stop(current_directory.error);return false end

@@ -17,6 +17,10 @@ pub const K_SCENE_MANIFEST: u16 = 0x0A14;
 pub const K_SCENE_PART: u16 = 0x0A15;
 pub const K_SCENE_ACK: u16 = 0x0A82;
 pub const K_DESCRIPTOR_PART: u16 = 0x0AC2;
+pub const K_GAMEPLAY_REQUEST: u16 = 0x0A90;
+pub const K_GAMEPLAY_RESULT: u16 = 0x0A91;
+pub const K_GAMEPLAY_READY: u16 = 0x0A92;
+pub const K_NATIVE_COMPRESSED: u16 = 0x0AF0;
 #[path = "native_descriptor_stream.rs"]
 pub mod descriptor_stream;
 #[path = "native_scene_stream.rs"]

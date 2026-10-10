@@ -1,5 +1,6 @@
 //! Native authority session. Player connection identity remains separate from native entities.
 use super::*;
+use crate::native_gameplay_wire as gp;
 use crate::native_service::Bridge;
 use crate::native_wire::{self as w, Directory, Entity, EntityRef, InputFrame};
 
@@ -51,6 +52,8 @@ pub(super) struct NativeCore {
     frame_seq: u32,
     last_world_ms: u64,
     presentation: HashMap<u32, bool>,
+    gameplay: HashMap<u32, bool>,
+    compression: HashMap<u32, bool>,
     diagnostic: bool,
     streams: HashMap<u32, PeerStream>,
     latest_scene: Option<Arc<w::scene_stream::Batch>>,
@@ -96,6 +99,8 @@ impl NativeCore {
             frame_seq: 0,
             last_world_ms: 0,
             presentation: HashMap::new(),
+            gameplay: HashMap::new(),
+            compression: HashMap::new(),
             diagnostic: mode == crate::native_mode::Mode::Diagnostic,
             streams: HashMap::new(),
             latest_scene: None,
@@ -108,16 +113,20 @@ impl NativeCore {
             .filter(|e| e.kind == w::HUMAN)
             .all(|e| {
                 e.owner_peer != 0
-                    && ((self.diagnostic
-                        && !self
-                            .presentation
-                            .get(&e.owner_peer)
-                            .copied()
-                            .unwrap_or(false))
-                        || self.bridge.mirror_ready(e.owner_peer))
+                    && (if self.gameplay.get(&e.owner_peer)==Some(&true){self.bridge.gameplay_ready(e.owner_peer)}else{(self.diagnostic
+                            && !self
+                                .presentation
+                                .get(&e.owner_peer)
+                                .copied()
+                                .unwrap_or(false))
+                        || self.bridge.mirror_ready(e.owner_peer)})
             })
     }
     pub(super) fn admits_capabilities(&self, caps: u64) -> bool {
+        if caps & gp::CAP_NATIVE_GAMEPLAY != 0 {
+            return caps & hsmp_net::net::caps::NATIVE_WORLD != 0
+                && caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0;
+        }
         let required = hsmp_net::net::caps::NATIVE_WORLD
             | if self.diagnostic {
                 0
@@ -218,6 +227,8 @@ impl NativeCore {
     fn unbind(&mut self, peer: u32) {
         self.streams.remove(&peer);
         self.presentation.remove(&peer);
+        self.gameplay.remove(&peer);
+        self.compression.remove(&peer);
         let Some(slot) = self
             .directory
             .entities
@@ -249,6 +260,9 @@ pub(super) fn joined(inner: &mut Inner, peer: u32, resume: bool, caps: u64) {
     if let Some(n) = inner.native.as_mut() {
         n.presentation
             .insert(peer, caps & hsmp_net::net::caps::NATIVE_PRESENTATION != 0);
+        n.gameplay.insert(peer, caps & gp::CAP_NATIVE_GAMEPLAY != 0);
+        n.compression
+            .insert(peer, caps & gp::CAP_NATIVE_COMPRESSION != 0);
         n.bind(peer, resume);
         n.bridge.replay_descriptors();
         if n.presentation.get(&peer) == Some(&true) {
@@ -270,6 +284,26 @@ pub(super) async fn handle(
     kind: u16,
     payload: &[u8],
 ) -> anyhow::Result<()> {
+    if kind == w::K_GAMEPLAY_READY {
+        let receipt = w::decode_mirror_ready(payload).map_err(anyhow::Error::msg)?;
+        let inner = state.inner.lock().await;
+        let peer = inner
+            .peers
+            .get(&from)
+            .ok_or_else(|| anyhow::anyhow!("gameplay ready has no authenticated peer"))?
+            .id;
+        let n = inner
+            .native
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("not a native session"))?;
+        if n.gameplay.get(&peer) != Some(&true) {
+            anyhow::bail!("peer has no native gameplay capability");
+        }
+        n.bridge
+            .accept_gameplay_ready(peer, receipt)
+            .map_err(anyhow::Error::msg)?;
+        return Ok(());
+    }
     if kind == w::K_SCENE_ACK {
         let ack = w::scene_stream::decode_ack(payload).map_err(anyhow::Error::msg)?;
         let mut inner = state.inner.lock().await;
@@ -313,10 +347,19 @@ pub(super) async fn handle(
         return Ok(());
     }
     // Only input can be supplied by a player. Pose, vitals, directory and world are local-source-only.
-    if kind != w::K_INPUT {
+    if kind != w::K_INPUT && kind != w::K_GAMEPLAY_REQUEST {
         anyhow::bail!("native client cannot publish authority");
     }
-    let mut i = w::decode_input(payload).map_err(anyhow::Error::msg)?;
+    let request = if kind == w::K_GAMEPLAY_REQUEST {
+        Some(gp::decode_request(payload).map_err(anyhow::Error::msg)?)
+    } else {
+        None
+    };
+    let mut i = if let Some(request) = &request {
+        request.input
+    } else {
+        w::decode_input(payload).map_err(anyhow::Error::msg)?
+    };
     if i.flags != 0 || i.delivery_seq != 0 {
         anyhow::bail!("native client input flags");
     }
@@ -337,6 +380,16 @@ pub(super) async fn handle(
     };
     if n.bridge.reset_pending() {
         anyhow::bail!("native world reset pending");
+    }
+    if let Some(request) = &request {
+        if n.gameplay.get(&peer) != Some(&true) || request.directory_seq != n.directory.seq {
+            anyhow::bail!("native gameplay request generation");
+        }
+        if n.directory.state != w::LIVE || !n.all_mirrors_ready() {
+            anyhow::bail!("native gameplay source or clients not ready");
+        }
+    } else if n.gameplay.get(&peer) == Some(&true) {
+        anyhow::bail!("native gameplay requires generation-qualified requests");
     }
     if n.presentation.get(&peer).copied().unwrap_or(false)
         && (n.directory.state != w::LIVE || !n.all_mirrors_ready())
@@ -466,7 +519,7 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
         if let Ok(batch) = w::descriptor_stream::Batch::new(&descriptor) {
             let batch = Arc::new(batch);
             for (&peer, &presenting) in &n.presentation {
-                if presenting {
+                if presenting || n.gameplay.get(&peer) == Some(&true) {
                     n.streams.entry(peer).or_default().metadata(batch.clone());
                 }
             }
@@ -519,6 +572,64 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
                 inner
                     .out_msgs
                     .push((None, hsmp_ipc::wire::message(w::K_WORLD, 0, 0, &payload)));
+            }
+        }
+    }
+    if let Some(frame) = n.bridge.take_gameplay() {
+        if frame.matches(&n.directory) && frame.authority_tick > n.frame_seq {
+            n.frame_seq = frame.authority_tick;
+            n.last_world_ms = now;
+            for e in &frame.entities {
+                if let Some(entity) = n
+                    .directory
+                    .entities
+                    .iter()
+                    .find(|row| row.reference == e.reference)
+                {
+                    if let Some(p) = inner.peers.values_mut().find(|p| p.id == entity.owner_peer) {
+                        p.alive = e.health.value() > 0.;
+                    }
+                }
+            }
+            let all_connected = n
+                .directory
+                .entities
+                .iter()
+                .filter(|e| e.kind == w::HUMAN)
+                .all(|e| e.owner_peer != 0);
+            if all_connected && n.all_mirrors_ready() && n.directory.state == w::READY {
+                n.directory.state = w::LIVE;
+                n.dirty = true;
+                n.bridge.set_directory(n.directory.clone());
+            }
+            if let Ok(payload) = gp::encode_result(&frame) {
+                for (&peer, &gameplay) in &n.gameplay {
+                    if gameplay {
+                        if let Some(address) = inner
+                            .peers
+                            .iter()
+                            .find_map(|(address, p)| (p.id == peer).then_some(*address))
+                        {
+                            let packed = if n.compression.get(&peer) == Some(&true) {
+                                n.bridge.compress_gameplay(&payload)
+                            } else {
+                                None
+                            };
+                            let bytes = packed.as_ref().map_or_else(
+                                || hsmp_ipc::wire::message(w::K_GAMEPLAY_RESULT, 0, 0, &payload),
+                                |body| {
+                                    hsmp_ipc::wire::message(
+                                        w::K_NATIVE_COMPRESSED,
+                                        0,
+                                        w::K_GAMEPLAY_RESULT as u32,
+                                        body,
+                                    )
+                                },
+                            );
+                            inner.out_msgs.push((Some(address), bytes));
+                        }
+                    }
+                }
             }
         }
     }
@@ -639,11 +750,23 @@ pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerSta
             let Some(mode) = crate::proto::record_mode(kind, index) else {
                 continue;
             };
-            let accepted = state.net.queue_bytes(
-                addr,
-                mode,
-                hsmp_ipc::wire::message(kind, 0, index, &payload),
+            let compress = {
+                let inner = state.inner.lock().await;
+                inner
+                    .native
+                    .as_ref()
+                    .is_some_and(|n| n.compression.get(&peer) == Some(&true))
+            };
+            let packed = if compress && kind == w::K_DESCRIPTOR_PART {
+                hsmp_net::net::compression::pack(kind, &payload)
+            } else {
+                None
+            };
+            let bytes = packed.as_ref().map_or_else(
+                || hsmp_ipc::wire::message(kind, 0, index, &payload),
+                |body| hsmp_ipc::wire::message(w::K_NATIVE_COMPRESSED, 0, kind as u32, body),
             );
+            let accepted = state.net.queue_bytes(addr, mode, bytes);
             let mut inner = state.inner.lock().await;
             if let Some(stream) = inner.native.as_mut().and_then(|n| n.streams.get_mut(&peer)) {
                 stream.flushing = false;

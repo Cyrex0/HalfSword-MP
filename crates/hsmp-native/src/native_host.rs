@@ -11,11 +11,12 @@ pub struct ServiceState {
     pub host: Option<HostHandle>, pub client: Option<ClientHandle>,
     parent: Option<Arc<hsmp_ipc::shm::ProcessHandle>>, parent_checked: bool, parent_failed: bool,
     role: RuntimeRole,
+    pub(crate) gameplay: crate::native_gameplay::State,
 }
 impl Default for ServiceState{
     fn default()->Self{
         let role=match std::env::var("HSMP_RUNTIME_ROLE").as_deref(){Ok("native_worker")=>RuntimeRole::Host,Ok("native_client")=>RuntimeRole::Client,Err(std::env::VarError::NotPresent)|Ok("")|Ok("client")=>RuntimeRole::Legacy,_=>RuntimeRole::Invalid};
-        Self{host:None,client:None,parent:None,parent_checked:false,parent_failed:false,role}
+        Self{host:None,client:None,parent:None,parent_checked:false,parent_failed:false,role,gameplay:Default::default()}
     }
 }
 impl ServiceState {
@@ -91,17 +92,55 @@ impl Native {
     }
     pub unsafe fn client_start(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
-            if self.native_host.role!=RuntimeRole::Client{return nil_err(L,"native client role required");}
-            if self.native_host.host.is_some() { return nil_err(L,"host already running"); }
-            if self.native_host.client.is_some() { lua_pushboolean(L,1); return 1; }
-            let (Some(addr),Some(dir),Some(nick))=(arg_str(L,1),arg_str(L,2),arg_str(L,3)) else { return nil_err(L,"client arguments"); };
-            let Ok(addr)=addr.parse() else{return nil_err(L,"client address");};
-            let pinned=match arg_str(L,4) {
-                None|Some("")=>None,
-                Some(s)=>{if s.len()!=64 {return nil_err(L,"server key");} let mut key=[0u8;32];
-                    for (i,x) in key.iter_mut().enumerate(){let Some(part)=s.get(i*2..i*2+2) else{return nil_err(L,"server key");}; let Ok(v)=u8::from_str_radix(part,16) else{return nil_err(L,"server key");}; *x=v;} Some(key)},
+            if self.native_host.role != RuntimeRole::Client {
+                return nil_err(L, "native client role required");
+            }
+            if self.native_host.host.is_some() {
+                return nil_err(L, "host already running");
+            }
+            if self.native_host.client.is_some() {
+                lua_pushboolean(L, 1);
+                return 1;
+            }
+            let (Some(addr), Some(dir), Some(nick)) = (arg_str(L, 1), arg_str(L, 2), arg_str(L, 3))
+            else {
+                return nil_err(L, "client arguments");
             };
-            match ClientHandle::start_presentation(addr,Path::new(dir),nick,pinned) { Ok(c)=>{self.native_host.client=Some(c);lua_pushboolean(L,1);1},Err(e)=>nil_err(L,&format!("native client: {e}")) }
+            let Ok(addr) = addr.parse() else {
+                return nil_err(L, "client address");
+            };
+            let pinned = match arg_str(L, 4) {
+                None | Some("") => None,
+                Some(s) => {
+                    if s.len() != 64 {
+                        return nil_err(L, "server key");
+                    }
+                    let mut key = [0u8; 32];
+                    for (i, x) in key.iter_mut().enumerate() {
+                        let Some(part) = s.get(i * 2..i * 2 + 2) else {
+                            return nil_err(L, "server key");
+                        };
+                        let Ok(v) = u8::from_str_radix(part, 16) else {
+                            return nil_err(L, "server key");
+                        };
+                        *x = v;
+                    }
+                    Some(key)
+                }
+            };
+            let started = if arg_str(L, 5) == Some("gameplay") {
+                ClientHandle::start_gameplay(addr, Path::new(dir), nick, pinned)
+            } else {
+                ClientHandle::start_presentation(addr, Path::new(dir), nick, pinned)
+            };
+            match started {
+                Ok(c) => {
+                    self.native_host.client = Some(c);
+                    lua_pushboolean(L, 1);
+                    1
+                }
+                Err(e) => nil_err(L, &format!("native client: {e}")),
+            }
         }
     }
     pub unsafe fn host_directory(&mut self, L: *mut lua_State) -> c_int {

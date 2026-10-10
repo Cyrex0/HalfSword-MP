@@ -310,7 +310,8 @@ pub extern "C" fn hsmp_native_set_source_object_factory(factory: Option<ObjectFa
         Ordering::Release,
     );
 }
-fn object_factory() -> Result<ObjectFactory, String> {
+// Shared only with the private gameplay endpoint; protected current-coroutine behavior is unchanged.
+pub(crate) fn object_factory() -> Result<ObjectFactory, String> {
     let p = OBJECT_FACTORY.load(Ordering::Acquire);
     if p.is_null() {
         Err("source wrapper factory unavailable".into())

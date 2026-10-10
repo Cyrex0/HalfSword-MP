@@ -1,4 +1,5 @@
 //! Embedded network services. Bounded immutable DTOs cross the game/network thread boundary.
+use crate::native_gameplay_wire as gp;
 use crate::native_wire::{self as w, Directory, InputFrame, World};
 use anyhow::{Context, Result};
 use hsmp_net::net::{Client, ClientConfig, ClientEvent, ConnConfig, SendMode};
@@ -10,6 +11,12 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
+fn decode_compressed_authority(negotiated:bool,hint:u32,payload:&[u8])->Result<(u16,Vec<u8>),&'static str>{
+    if !negotiated{return Err("unnegotiated native compression");}
+    let limit=match hint{v if v==w::K_GAMEPLAY_RESULT as u32=>gp::MAX_RESULT_BYTES,v if v==w::K_DESCRIPTOR_PART as u32=>64*1024,_=>return Err("native compressed authority kind refused")};
+    let(kind,body)=hsmp_net::net::compression::unpack(payload,limit)?;
+    if kind as u32!=hint{return Err("native compressed authority kind mismatch");}Ok((kind,body))
+}
 
 #[derive(Default)]
 struct Shared {
@@ -22,6 +29,16 @@ struct Shared {
     server_clock: Option<(u64, Instant)>,
     connected: bool,
     presentation: bool,
+    gameplay_client: bool,
+    gameplay: Option<Arc<gp::ResultFrame>>,
+    gameplay_out: Option<gp::ResultFrame>,
+    gameplay_received: Option<Instant>,
+    gameplay_receipts: HashMap<u32, w::MirrorReady>,
+    gameplay_control_out: VecDeque<w::MirrorReady>,
+    gameplay_applied: Option<(w::MirrorReady, Instant)>,
+    gameplay_inputs: VecDeque<(gp::Request, Instant)>,
+    native_compression: bool,
+    codec: CompressionMetrics,
     error: String,
     world_reset: bool,
     descriptors: HashMap<u32, Arc<w::Descriptor>>,
@@ -36,6 +53,17 @@ struct Shared {
     stream_ack: Option<w::scene_stream::Ack>,
     applied: Option<(w::MirrorReady, Instant)>,
     descriptor_stream: w::descriptor_stream::Assembly,
+}
+#[derive(Clone, Copy, Default, Debug)]
+pub struct CompressionMetrics {
+    pub encode_samples: u32,
+    pub raw_bytes: u64,
+    pub wire_bytes: u64,
+    pub encode_us: u64,
+    pub decode_samples: u32,
+    pub decode_raw_bytes: u64,
+    pub decode_wire_bytes: u64,
+    pub decode_us: u64,
 }
 /// A complete, game-thread observed roster. Native pointers never cross into
 /// the network thread; its original directory identity is checked again there.
@@ -91,6 +119,32 @@ impl Scene {
         )
     }
 }
+/// Complete compact result and bootstrap recipes, with the original network receipt.
+#[derive(Clone)]
+pub struct GameplayScene {
+    pub directory: Directory,
+    pub descriptors: Vec<Arc<w::Descriptor>>,
+    pub result: Arc<gp::ResultFrame>,
+    pub peer_id: u32,
+    pub received: Instant,
+}
+impl GameplayScene {
+    pub fn fresh(&self) -> bool {
+        self.received.elapsed().as_millis() < w::INPUT_TIMEOUT_MS as u128
+    }
+    pub fn receipt(&self) -> w::MirrorReady {
+        w::MirrorReady {
+            epoch: self.directory.epoch,
+            directory_seq: self.directory.seq,
+            frame_seq: self.result.authority_tick,
+            entities: self
+                .descriptors
+                .iter()
+                .map(|d| (d.reference, d.revision))
+                .collect(),
+        }
+    }
+}
 #[derive(Default)]
 pub(crate) struct Bridge {
     shared: Mutex<Shared>,
@@ -112,6 +166,13 @@ impl Bridge {
             s.control_out.clear();
             s.mirror_receipts.clear();
             s.applied = None;
+            s.gameplay = None;
+            s.gameplay_out = None;
+            s.gameplay_received = None;
+            s.gameplay_receipts.clear();
+            s.gameplay_control_out.clear();
+            s.gameplay_applied = None;
+            s.gameplay_inputs.clear();
             s.stream_ack = None;
             s.source_roster = None;
             if !s
@@ -191,6 +252,13 @@ impl Bridge {
         s.descriptor_stream = Default::default();
         s.stream_ack = None;
         s.applied = None;
+        s.gameplay = None;
+        s.gameplay_out = None;
+        s.gameplay_received = None;
+        s.gameplay_receipts.clear();
+        s.gameplay_control_out.clear();
+        s.gameplay_applied = None;
+        s.gameplay_inputs.clear();
         s.source_roster = None;
     }
     pub(crate) fn take_world_reset(&self) -> bool {
@@ -214,6 +282,93 @@ impl Bridge {
         }
         s.published = Some(world);
         Ok(())
+    }
+    pub(crate) fn publish_gameplay(&self, frame: gp::ResultFrame) -> Result<(), &'static str> {
+        frame.validate()?;
+        let mut s = self.lock();
+        if s.world_reset || !s.directory.as_ref().is_some_and(|d| frame.matches(d)) {
+            return Err("stale gameplay directory");
+        }
+        if s.gameplay
+            .as_ref()
+            .is_some_and(|old| old.authority_tick >= frame.authority_tick)
+        {
+            return Err("stale gameplay authority tick");
+        }
+        if s.gameplay.as_ref().is_some_and(|old| {
+            frame.entities.iter().any(|e| {
+                old.entities.iter().any(|p| {
+                    p.reference == e.reference
+                        && (p.request_seq > e.request_seq || p.delivery_seq > e.delivery_seq)
+                })
+            })
+        }) {
+            return Err("gameplay execution acknowledgement regressed");
+        }
+        s.gameplay = Some(Arc::new(frame.clone()));
+        s.gameplay_received = Some(Instant::now());
+        s.gameplay_out = Some(frame);
+        Ok(())
+    }
+    pub(crate) fn take_gameplay(&self) -> Option<gp::ResultFrame> {
+        self.lock().gameplay_out.take()
+    }
+    pub(crate) fn compress_gameplay(&self, body: &[u8]) -> Option<Vec<u8>> {
+        let start = Instant::now();
+        let packed = hsmp_net::net::compression::pack(w::K_GAMEPLAY_RESULT, body);
+        let elapsed = start.elapsed().as_micros().min(u64::MAX as u128) as u64;
+        let mut s = self.lock();
+        if s.codec.encode_samples < 8 {
+            s.codec.encode_samples += 1;
+            s.codec.raw_bytes += body.len() as u64;
+            s.codec.wire_bytes += packed.as_ref().map_or(body.len(), Vec::len) as u64;
+            s.codec.encode_us += elapsed;
+        }
+        packed
+    }
+    pub(crate) fn accept_gameplay_ready(
+        &self,
+        peer: u32,
+        receipt: w::MirrorReady,
+    ) -> Result<(), &'static str> {
+        w::encode_mirror_ready(&receipt)?;
+        let mut s = self.lock();
+        let d = s.directory.as_ref().ok_or("no gameplay directory")?;
+        let frame = s.gameplay.as_ref().ok_or("no gameplay result")?;
+        if receipt.epoch != d.epoch
+            || receipt.directory_seq != d.seq
+            || receipt.frame_seq > frame.authority_tick
+            || receipt.entities.len() != d.entities.len()
+            || !d
+                .entities
+                .iter()
+                .any(|e| e.owner_peer == peer && e.kind == w::HUMAN)
+            || receipt.entities.iter().any(|(r, v)| {
+                !d.entities.iter().any(|e| e.reference == *r)
+                    || !s
+                        .descriptors
+                        .get(&r.id)
+                        .is_some_and(|d| d.reference == *r && d.revision == *v)
+            })
+        {
+            return Err("gameplay readiness generation");
+        }
+        s.gameplay_receipts.insert(peer, receipt);
+        Ok(())
+    }
+    pub(crate) fn gameplay_ready(&self, peer: u32) -> bool {
+        let s = self.lock();
+        s.gameplay_receipts.get(&peer).is_some_and(|r| {
+            s.directory.as_ref().is_some_and(|d| {
+                r.epoch == d.epoch
+                    && r.directory_seq == d.seq
+                    && r.entities.len() == d.entities.len()
+            }) && r.entities.iter().all(|(reference, v)| {
+                s.descriptors
+                    .get(&reference.id)
+                    .is_some_and(|d| d.reference == *reference && d.revision == *v)
+            })
+        })
     }
     pub(crate) fn publish_descriptor(&self, d: w::Descriptor) -> Result<(), &'static str> {
         w::encode_descriptor(&d)?;
@@ -247,6 +402,8 @@ impl Bridge {
         s.render_out = None;
         s.mirror_receipts.clear();
         s.applied = None;
+        s.gameplay_applied = None;
+        s.gameplay_receipts.clear();
         if s.stream.manifest().is_some_and(|m| {
             m.entities
                 .iter()
@@ -609,7 +766,9 @@ impl HostHandle {
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
                 | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
                 | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
-                | hsmp_net::net::caps::NATIVE_SCENE_STREAM,
+                | hsmp_net::net::caps::NATIVE_SCENE_STREAM
+                | gp::CAP_NATIVE_GAMEPLAY
+                | gp::CAP_NATIVE_COMPRESSION,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -686,6 +845,12 @@ impl HostHandle {
     pub fn publish_world(&self, world: World) -> Result<(), &'static str> {
         self.bridge.publish_world(world)
     }
+    pub fn publish_gameplay(&self, frame: gp::ResultFrame) -> Result<(), &'static str> {
+        self.bridge.publish_gameplay(frame)
+    }
+    pub fn compression_metrics(&self) -> CompressionMetrics {
+        self.bridge.lock().codec
+    }
 }
 pub struct ClientHandle {
     bridge: Arc<Bridge>,
@@ -698,7 +863,7 @@ impl ClientHandle {
         nick: &str,
         pinned_key: Option<[u8; 32]>,
     ) -> Result<Self> {
-        Self::start_role(server, identity_dir, nick, pinned_key, false)
+        Self::start_role(server, identity_dir, nick, pinned_key, false, false)
     }
     pub fn start_presentation(
         server: SocketAddr,
@@ -706,7 +871,15 @@ impl ClientHandle {
         nick: &str,
         pinned_key: Option<[u8; 32]>,
     ) -> Result<Self> {
-        Self::start_role(server, identity_dir, nick, pinned_key, true)
+        Self::start_role(server, identity_dir, nick, pinned_key, true, false)
+    }
+    pub fn start_gameplay(
+        server: SocketAddr,
+        identity_dir: &Path,
+        nick: &str,
+        pinned_key: Option<[u8; 32]>,
+    ) -> Result<Self> {
+        Self::start_role(server, identity_dir, nick, pinned_key, false, true)
     }
     fn start_role(
         server: SocketAddr,
@@ -714,6 +887,7 @@ impl ClientHandle {
         nick: &str,
         pinned_key: Option<[u8; 32]>,
         presentation: bool,
+        gameplay: bool,
     ) -> Result<Self> {
         if nick.len() > 32 {
             anyhow::bail!("native client nick exceeds 32 bytes");
@@ -731,6 +905,9 @@ impl ClientHandle {
         cfg.build = crate::build_id::build_tag("hsmp-native");
         cfg.content_hash = crate::build_id::content_hash();
         cfg.caps |= hsmp_net::net::caps::NATIVE_WORLD | hsmp_net::net::caps::MODES;
+        if gameplay {
+            cfg.caps |= gp::CAP_NATIVE_GAMEPLAY | gp::CAP_NATIVE_COMPRESSION;
+        }
         if presentation {
             cfg.caps |= hsmp_net::net::caps::NATIVE_PRESENTATION
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
@@ -743,6 +920,7 @@ impl ClientHandle {
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
         bridge.lock().presentation = presentation;
+        bridge.lock().gameplay_client = gameplay;
         let stop = Arc::new(AtomicBool::new(false));
         let thread_stop = stop.clone();
         let thread = std::thread::Builder::new()
@@ -777,6 +955,9 @@ impl ClientHandle {
     pub fn connected(&self) -> bool {
         self.bridge.lock().connected
     }
+    pub fn compression_metrics(&self) -> CompressionMetrics {
+        self.bridge.lock().codec
+    }
     pub fn error(&self) -> String {
         self.bridge.lock().error.clone()
     }
@@ -803,6 +984,80 @@ impl ClientHandle {
             peer_id: s.peer_id,
             received: s.render_received?,
         })
+    }
+    pub fn gameplay_scene(&self) -> Option<GameplayScene> {
+        let s = self.bridge.lock();
+        if !s.connected || !s.gameplay_client {
+            return None;
+        }
+        let directory = s.directory.clone()?;
+        let result = s.gameplay.clone()?;
+        if !result.matches(&directory) {
+            return None;
+        }
+        let descriptors = directory
+            .entities
+            .iter()
+            .map(|e| {
+                s.descriptors
+                    .get(&e.reference.id)
+                    .filter(|d| {
+                        d.reference == e.reference
+                            && d.directory_seq == directory.seq
+                            && d.slot == e.slot
+                    })
+                    .cloned()
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(GameplayScene {
+            directory,
+            descriptors,
+            result,
+            peer_id: s.peer_id,
+            received: s.gameplay_received?,
+        })
+    }
+    /// Only the native gameplay apply/readback endpoint may acknowledge this same immutable result.
+    pub fn gameplay_applied(&self, scene: &GameplayScene) -> Result<(), &'static str> {
+        if !scene.fresh() {
+            return Err("native gameplay result is stale");
+        }
+        let receipt = scene.receipt();
+        let mut s = self.bridge.lock();
+        if !s.connected
+            || !s.gameplay_client
+            || !s
+                .gameplay
+                .as_ref()
+                .is_some_and(|current| current.authority_tick>=scene.result.authority_tick)
+            || s.gameplay_received.is_none_or(|received|received<scene.received)
+            || !s
+                .directory
+                .as_ref()
+                .is_some_and(|d| d.epoch == scene.directory.epoch && d.seq == scene.directory.seq)
+            || receipt.entities.iter().any(|(r, v)| {
+                !s.descriptors
+                    .get(&r.id)
+                    .is_some_and(|d| d.reference == *r && d.revision == *v)
+            })
+        {
+            return Err("native gameplay apply generation changed");
+        }
+        if s.gameplay_applied.as_ref().is_some_and(|(old, _)| {
+            old.epoch == receipt.epoch
+                && old.directory_seq == receipt.directory_seq
+                && old.frame_seq > receipt.frame_seq
+        }) {
+            return Err("stale gameplay apply tick");
+        }
+        s.gameplay_applied = Some((receipt.clone(), scene.received));
+        s.gameplay_control_out
+            .retain(|r| r.epoch != receipt.epoch || r.directory_seq != receipt.directory_seq);
+        if s.gameplay_control_out.len() >= w::MAX_ENTITIES {
+            return Err("gameplay readiness queue full");
+        }
+        s.gameplay_control_out.push_back(receipt);
+        Ok(())
     }
     pub fn mirror_ready(&self, receipt: w::MirrorReady) -> Result<(), &'static str> {
         w::encode_mirror_ready(&receipt)?;
@@ -890,9 +1145,42 @@ impl ClientHandle {
         {
             return Err("native applied scene is stale");
         }
+        if s.gameplay_client
+            && !s.gameplay_applied.as_ref().is_some_and(|(r, received)| {
+                received.elapsed().as_millis() < w::INPUT_TIMEOUT_MS as u128
+                    && s.directory.as_ref().is_some_and(|d| {
+                        d.state == w::LIVE && r.epoch == d.epoch && r.directory_seq == d.seq
+                    })
+                    && r.entities.iter().all(|(reference, v)| {
+                        s.descriptors
+                            .get(&reference.id)
+                            .is_some_and(|d| d.reference == *reference && d.revision == *v)
+                    })
+            })
+        {
+            return Err("native gameplay result is stale");
+        }
         let (clock, captured) = s.server_clock.ok_or("no server clock")?;
         frame.sample_ms = clock.saturating_add(captured.elapsed().as_millis() as u64);
+        let gameplay_directory = s
+            .gameplay_client
+            .then(|| s.directory.as_ref().map(|d| d.seq))
+            .flatten();
         drop(s);
+        if let Some(directory_seq) = gameplay_directory {
+            let mut s = self.bridge.lock();
+            if s.gameplay_inputs.len() >= w::MAX_INPUTS {
+                return Err("gameplay input queue full");
+            }
+            s.gameplay_inputs.push_back((
+                gp::Request {
+                    directory_seq,
+                    input: frame,
+                },
+                Instant::now(),
+            ));
+            return Ok(());
+        }
         if !self.bridge.push_input(frame) {
             return Err("input queue full");
         }
@@ -959,6 +1247,43 @@ async fn client_loop(
                 }
             }
         }
+        let gameplay_inputs = {
+            let mut s = bridge.lock();
+            s.gameplay_inputs.drain(..).collect::<Vec<_>>()
+        };
+        for (request, captured) in gameplay_inputs {
+            if captured.elapsed().as_millis() >= w::INPUT_TIMEOUT_MS as u128 {
+                continue;
+            }
+            if let Ok(payload) = gp::encode_request(&request) {
+                if client
+                    .send(
+                        SendMode::Ordered,
+                        hsmp_ipc::wire::message(w::K_GAMEPLAY_REQUEST, 0, 0, &payload),
+                    )
+                    .is_err()
+                {
+                    bridge.lock().error = "native gameplay request transport full".into();
+                }
+            }
+        }
+        let ready = bridge.lock().gameplay_control_out.front().cloned();
+        if let Some(receipt) = ready {
+            if let Ok(payload) = w::encode_mirror_ready(&receipt) {
+                if client
+                    .send(
+                        SendMode::Ordered,
+                        hsmp_ipc::wire::message(w::K_GAMEPLAY_READY, 0, 0, &payload),
+                    )
+                    .is_ok()
+                {
+                    let mut s = bridge.lock();
+                    if s.gameplay_control_out.front() == Some(&receipt) {
+                        s.gameplay_control_out.pop_front();
+                    }
+                }
+            }
+        }
         bridge.send_receipt(|receipt| {
             if let Ok(payload) = w::encode_mirror_ready(&receipt) {
                 return client
@@ -1006,8 +1331,16 @@ async fn client_loop(
                 ClientEvent::Connected {
                     server_key, caps, ..
                 } => {
+                    bridge.lock().native_compression = cfg.caps & gp::CAP_NATIVE_COMPRESSION != 0
+                        && caps & gp::CAP_NATIVE_COMPRESSION != 0;
                     if caps & hsmp_net::net::caps::NATIVE_WORLD == 0 {
                         bridge.lock().error = "server has no native authority".into();
+                        return;
+                    }
+                    if cfg.caps & gp::CAP_NATIVE_GAMEPLAY != 0
+                        && caps & gp::CAP_NATIVE_GAMEPLAY == 0
+                    {
+                        bridge.lock().error = "server has no compact native gameplay".into();
                         return;
                     }
                     if cfg.caps & hsmp_net::net::caps::NATIVE_PRESENTATION != 0
@@ -1064,7 +1397,45 @@ async fn client_loop(
                 }
                 ClientEvent::Message(d) => {
                     if let Ok((h, payload)) = hsmp_ipc::wire::split(&d.data) {
-                        match h.kind {
+                        let decoded = if h.kind == w::K_NATIVE_COMPRESSED {
+                            let started = Instant::now();
+                            let negotiated=bridge.lock().native_compression;
+                            let unpacked = decode_compressed_authority(negotiated,h.peer,payload);
+                            if let Ok((kind, body)) = &unpacked {
+                                if *kind == w::K_GAMEPLAY_RESULT {
+                                    let mut s = bridge.lock();
+                                    if s.codec.decode_samples < 8 {
+                                        s.codec.decode_samples += 1;
+                                        s.codec.decode_raw_bytes += body.len() as u64;
+                                        s.codec.decode_wire_bytes += payload.len() as u64;
+                                        s.codec.decode_us +=
+                                            started.elapsed().as_micros().min(u64::MAX as u128)
+                                                as u64;
+                                    }
+                                }
+                            }
+                            match unpacked {
+                                Ok((kind, bytes))
+                                    if matches!(
+                                        kind,
+                                        w::K_GAMEPLAY_RESULT | w::K_DESCRIPTOR_PART
+                                    ) && h.peer == kind as u32 =>
+                                {
+                                    Some((kind, bytes))
+                                }
+                                _ => {
+                                    bridge.lock().error =
+                                        "native compressed authority record refused".into();
+                                    return;
+                                }
+                            }
+                        } else {
+                            None
+                        };
+                        let (kind, payload) = decoded
+                            .as_ref()
+                            .map_or((h.kind, payload), |(kind, bytes)| (*kind, bytes.as_slice()));
+                        match kind {
                             hsmp_ipc::schema::session::K_WELCOME => {
                                 if let Ok(v) = hsmp_ipc::record::view::<
                                     hsmp_ipc::schema::session::Welcome,
@@ -1104,6 +1475,31 @@ async fn client_loop(
                                             .is_none_or(|old| world.frame_seq > old.frame_seq)
                                     {
                                         s.world = Some(Arc::new(world));
+                                    }
+                                }
+                            }
+                            w::K_GAMEPLAY_RESULT => {
+                                if let Ok(frame) = gp::decode_result(payload) {
+                                    let mut s = bridge.lock();
+                                    if s.gameplay_client
+                                        && s.directory.as_ref().is_some_and(|d| frame.matches(d))
+                                        && s.gameplay.as_ref().is_none_or(|old| {
+                                            frame.authority_tick > old.authority_tick
+                                        })
+                                        && s.gameplay.as_ref().is_none_or(|old| {
+                                            frame.entities.iter().all(|e| {
+                                                old.entities
+                                                    .iter()
+                                                    .filter(|p| p.reference == e.reference)
+                                                    .all(|p| {
+                                                        e.request_seq >= p.request_seq
+                                                            && e.delivery_seq >= p.delivery_seq
+                                                    })
+                                            })
+                                        })
+                                    {
+                                        s.gameplay = Some(Arc::new(frame));
+                                        s.gameplay_received = Some(Instant::now());
                                     }
                                 }
                             }
@@ -1238,6 +1634,40 @@ fn copy_client_config(cfg: &ClientConfig) -> ClientConfig {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[test]fn gameplay_compression_requires_negotiated_authenticated_kind_and_bound(){let body=vec![0u8;317];let packed=hsmp_net::net::compression::pack(w::K_GAMEPLAY_RESULT,&body).unwrap();assert_eq!(decode_compressed_authority(true,w::K_GAMEPLAY_RESULT as u32,&packed).unwrap(),(w::K_GAMEPLAY_RESULT,body));assert!(decode_compressed_authority(false,w::K_GAMEPLAY_RESULT as u32,&packed).is_err());assert!(decode_compressed_authority(true,w::K_DESCRIPTOR_PART as u32,&packed).is_err());assert!(decode_compressed_authority(true,w::K_GAMEPLAY_READY as u32,&[]).is_err());let oversized=hsmp_net::net::compression::pack(w::K_GAMEPLAY_RESULT,&vec![0;gp::MAX_RESULT_BYTES+1]).unwrap();assert!(decode_compressed_authority(true,w::K_GAMEPLAY_RESULT as u32,&oversized).is_err());let nested=hsmp_net::net::compression::pack(w::K_NATIVE_COMPRESSED,&vec![0;317]).unwrap();assert!(decode_compressed_authority(true,w::K_GAMEPLAY_RESULT as u32,&nested).is_err());}
+    fn gameplay_fixture()->(ClientHandle,Arc<Bridge>){
+        let(directory,recipes,_)=w::scene_stream::tests::fixture();let bridge=Arc::new(Bridge::default());bridge.set_directory(directory.clone());for d in recipes{bridge.publish_descriptor((*d).clone()).unwrap();}
+        let frame=gp::ResultFrame{epoch:directory.epoch,directory_seq:directory.seq,authority_tick:1,entities:directory.entities.iter().map(|e|gp::State{reference:e.reference,request_seq:0,delivery_seq:0,buttons:0,axes:[0.;8],position:[0.;3],rotation:[0.;3],velocity:[0.;3],health:gp::NativeScalar::F32(100f32.to_bits()),stamina:gp::NativeScalar::F64(99f64.to_bits())}).collect()};bridge.publish_gameplay(frame).unwrap();{let mut s=bridge.lock();s.connected=true;s.gameplay_client=true;s.peer_id=9001;}
+        let client=ClientHandle{bridge:bridge.clone(),_service:ThreadService{stop:Arc::new(AtomicBool::new(false)),thread:None}};(client,bridge)
+    }
+    #[test]fn gameplay_bootstrap_native_ack_is_separate_from_scene_assembly(){let(client,bridge)=gameplay_fixture();let scene=client.gameplay_scene().unwrap();assert!(scene.fresh());assert!(bridge.lock().render.is_none());assert!(!bridge.gameplay_ready(9001));client.gameplay_applied(&scene).unwrap();let receipt=bridge.lock().gameplay_control_out.front().cloned().unwrap();bridge.accept_gameplay_ready(9001,receipt.clone()).unwrap();assert!(bridge.gameplay_ready(9001));assert!(!bridge.mirror_ready(9001));assert!(bridge.accept_gameplay_ready(123456,receipt).is_err());}
+    #[test]fn gameplay_original_receipt_and_result_arc_never_renew(){let(client,bridge)=gameplay_fixture();let old=client.gameplay_scene().unwrap();let mut next=(*old.result).clone();next.authority_tick+=1;bridge.publish_gameplay(next).unwrap();client.gameplay_applied(&old).unwrap();assert_eq!(bridge.lock().gameplay_applied.as_ref().unwrap().1,old.received);assert_eq!(old.result.authority_tick,1);let mut stale=old;stale.received=Instant::now().checked_sub(Duration::from_millis(300)).unwrap();assert!(!stale.fresh());assert!(client.gameplay_applied(&stale).is_err());}
+    #[test]fn gameplay_authority_ticks_and_execution_ack_are_monotonic(){let(_,bridge)=gameplay_fixture();let original=bridge.lock().gameplay.as_ref().unwrap().as_ref().clone();assert!(bridge.publish_gameplay(original.clone()).is_err());let mut next=original.clone();next.authority_tick=2;next.entities[0].request_seq=2;next.entities[0].delivery_seq=1;bridge.publish_gameplay(next.clone()).unwrap();next.authority_tick=3;next.entities[0].request_seq=0;next.entities[0].delivery_seq=0;assert!(bridge.publish_gameplay(next).is_err());let mut wrong=original;wrong.authority_tick=4;wrong.directory_seq+=1;assert!(bridge.publish_gameplay(wrong).is_err());}
+    #[test]
+    fn compact_gameplay_bootstrap_results_and_ordered_edges_cross_authenticated_udp(){
+        let temp=std::env::temp_dir().join(format!("hsmp-gameplay-{}-{}",std::process::id(),rand::random::<u64>()));
+        {
+            let host=HostHandle::start_with_parent_mode("127.0.0.1:0".parse().unwrap(),&temp.join("host"),"Map_Arena_Yard",None,crate::native_mode::Mode::Pvp).unwrap();host.status(w::READY,"").unwrap();
+            let a=ClientHandle::start_gameplay(host.address,&temp.join("a"),"A",None).unwrap();let b=ClientHandle::start_gameplay(host.address,&temp.join("b"),"B",None).unwrap();
+            wait_for(||a.connected()&&b.connected()&&host.directory().is_some_and(|d|d.entities.iter().all(|e|e.owner_peer!=0)));
+            let directory=host.directory().unwrap();wait_for(||a.directory().is_some_and(|d|d.seq==directory.seq)&&b.directory().is_some_and(|d|d.seq==directory.seq));
+            for e in &directory.entities{host.publish_descriptor(w::Descriptor{reference:e.reference,slot:e.slot,directory_seq:directory.seq,revision:1,source_frame_seq:1,recipe:crate::native_descriptor::fixture_recipe()}).unwrap();}
+            let mut result=gp::ResultFrame{epoch:directory.epoch,directory_seq:directory.seq,authority_tick:1,entities:directory.entities.iter().map(|e|gp::State{reference:e.reference,request_seq:0,delivery_seq:0,buttons:0,axes:[0.;8],position:[-0.,1.0000000000000002,2.],rotation:[0.;3],velocity:[0.;3],health:gp::NativeScalar::F32(100.125f32.to_bits()),stamina:gp::NativeScalar::F64(70.12345678901234f64.to_bits())}).collect()};
+            wait_for(||{host.publish_gameplay(result.clone()).unwrap();result.authority_tick+=1;a.gameplay_scene().is_some()&&b.gameplay_scene().is_some()});
+            let first=a.gameplay_scene().unwrap();assert!(a.scene().is_none());assert_eq!(first.result.entities[0].position[1].to_bits(),1.0000000000000002f64.to_bits());assert_eq!(first.result.entities[0].health,gp::NativeScalar::F32(100.125f32.to_bits()));
+            a.gameplay_applied(&first).unwrap();b.gameplay_applied(&b.gameplay_scene().unwrap()).unwrap();
+            wait_for(||{host.publish_gameplay(result.clone()).unwrap();result.authority_tick+=1;a.directory().is_some_and(|d|d.state==w::LIVE)&&b.directory().is_some_and(|d|d.state==w::LIVE)});
+            let own=directory.entities.iter().find(|e|e.owner_peer==a.peer_id()).unwrap().reference;let other=directory.entities.iter().find(|e|e.owner_peer==b.peer_id()).unwrap().reference;
+            let scene=a.gameplay_scene().unwrap();a.gameplay_applied(&scene).unwrap();assert!(a.input(InputFrame{reference:other,seq:1,..Default::default()}).is_err());
+            a.input(InputFrame{reference:own,seq:1,buttons:1,axes:[0.5,0.,0.,0.,0.,0.,0.,0.],..Default::default()}).unwrap();a.input(InputFrame{reference:own,seq:2,buttons:0,..Default::default()}).unwrap();
+            let mut delivered=Vec::new();wait_for(||{delivered.extend(host.inputs(32).into_iter().filter(|f|f.reference==own&&f.flags==0));delivered.len()>=2});assert_eq!(delivered.iter().map(|f|(f.seq,f.delivery_seq,f.buttons)).collect::<Vec<_>>(),vec![(1,1,1),(2,2,0)]);
+            let row=result.entities.iter_mut().find(|e|e.reference==own).unwrap();row.request_seq=2;row.delivery_seq=2;row.buttons=0;host.publish_gameplay(result.clone()).unwrap();result.authority_tick+=1;wait_for(||a.gameplay_scene().is_some_and(|s|s.result.entities.iter().any(|e|e.reference==own&&e.request_seq==2)));
+            let metrics=host.compression_metrics();assert!(metrics.encode_samples>0);assert!(metrics.wire_bytes<metrics.raw_bytes);assert!(a.compression_metrics().decode_samples>0);
+            {let mut s=a.bridge.lock();let received=Instant::now().checked_sub(Duration::from_millis(300)).unwrap();if let Some((_,receipt))=s.gameplay_applied.as_mut(){*receipt=received;}}
+            assert!(a.input(InputFrame{reference:own,seq:3,..Default::default()}).is_err());
+        }
+        assert!(temp.starts_with(std::env::temp_dir())&&temp.file_name().unwrap().to_string_lossy().starts_with("hsmp-gameplay-"));std::fs::remove_dir_all(temp).unwrap();
+    }
     fn wait_for(mut f: impl FnMut() -> bool) {
         let started = Instant::now();
         while !f() {

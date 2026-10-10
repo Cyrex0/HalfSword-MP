@@ -220,6 +220,16 @@ entry! {
     l_host_parent_alive => Guard::GameThread, |n, L| n.host_parent_alive(L);
     l_native_input => Guard::GameThread, |n, L| n.native_input(L);
     l_native_snapshot => Guard::GameThread, |n, L| n.native_snapshot(L);
+    l_native_gameplay_sample => Guard::GameThread, |n,L| n.native_gameplay_sample(L);
+    l_native_gameplay_scene => Guard::GameThread, |n,L| n.native_gameplay_scene(L);
+    l_native_gameplay_metrics => Guard::GameThread, |n,L| n.native_gameplay_metrics(L);
+    l_native_gameplay_begin => Guard::GameThread, |n,L| n.native_gameplay_begin(L);
+    l_native_gameplay_current => Guard::GameThread, |n,L| n.native_gameplay_current(L);
+    l_native_gameplay_construct => Guard::GameThread, |n,L| n.native_gameplay_construct(L);
+    l_native_gameplay_finish => Guard::GameThread, |n,L| n.native_gameplay_finish(L);
+    l_native_gameplay_apply => Guard::GameThread, |n,L| n.native_gameplay_apply(L);
+    l_native_gameplay_confirm => Guard::GameThread, |n,L| n.native_gameplay_confirm(L);
+    l_native_gameplay_clear => Guard::GameThread, |n,L| n.native_gameplay_clear(L);
     l_native_inspect_component => Guard::GameThread, |n,L| n.native_inspect_component(L);
     l_host_describe => Guard::GameThread, |n,L| n.host_describe(L);
     l_native_source_roster_facts => Guard::GameThread, |n,L| n.native_source_roster_facts(L);
@@ -311,6 +321,16 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("host_parent_alive", l_host_parent_alive),
     ("native_input", l_native_input),
     ("native_snapshot", l_native_snapshot),
+    ("native_gameplay_sample",l_native_gameplay_sample),
+    ("native_gameplay_scene",l_native_gameplay_scene),
+    ("native_gameplay_metrics",l_native_gameplay_metrics),
+    ("native_gameplay_begin",l_native_gameplay_begin),
+    ("native_gameplay_current",l_native_gameplay_current),
+    ("native_gameplay_construct",l_native_gameplay_construct),
+    ("native_gameplay_finish",l_native_gameplay_finish),
+    ("native_gameplay_apply",l_native_gameplay_apply),
+    ("native_gameplay_confirm",l_native_gameplay_confirm),
+    ("native_gameplay_clear",l_native_gameplay_clear),
     ("native_inspect_component",l_native_inspect_component),
     ("host_describe",l_host_describe),
     ("native_source_roster_facts",l_native_source_roster_facts),

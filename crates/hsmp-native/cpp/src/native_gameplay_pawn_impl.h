@@ -1,0 +1,301 @@
+// Included inside native_presentation.cpp's private namespace. Real native
+// Willie construction is separate from the inert visual-mirror provider.
+struct GameplayApplied {
+    HsmpGameplayState expected{};HsmpGameplayProof proof{};
+    Obj root{},movement{},mesh{},asset{};
+    LookupEntry root_path,movement_path,mesh_path,asset_path,camera_path,hud_path,owner_api_path;
+    HsmpProp root_field{},parent{},position{},rotation{},velocity{},health{},stamina{},mesh_field{},visible{},hidden{},skinned{},skeletal{};
+    HsmpProp manager{},pc_owner{},view_target{},pending_target{},hud_field{},show_hud{};
+};
+struct GameplayPawn {
+    Obj world{},controller{},pawn{},actor_class{},level{};
+    Transform initial{};uint32_t own{},stage{};
+    LookupEntry world_path,controller_path,pawn_path;
+    HsmpProp level_world{},controller_pawn{},pawn_controller{};
+    std::optional<GameplayApplied> applied;
+};
+std::map<uint64_t,GameplayPawn> gameplay_pawns;
+std::mutex gameplay_mutex;
+uint64_t gameplay_next_handle=1;
+bool gameplay_layouts_verified{};
+void gameplay_owner_code(){
+    const auto* image=reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));require(image!=nullptr,"native gameplay shipping image unavailable");
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);require(dos->e_magic==IMAGE_DOS_SIGNATURE&&dos->e_lfanew>0&&dos->e_lfanew<65536,"native gameplay shipping image invalid");
+    const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
+    constexpr std::array<uint8_t,32> bytes{0x48,0x8b,0x42,0x20,0x45,0x33,0xc9,0x48,0x85,0xc0,0x41,0x0f,0x95,0xc1,0x4c,0x03,
+        0xc8,0x4c,0x89,0x4a,0x20,0x48,0x8b,0x81,0x90,0,0,0,0x49,0x89,0,0xc3};
+    require(pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe->OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&
+        pe->OptionalHeader.SizeOfImage>0x3b54190+bytes.size()&&std::memcmp(image+0x3b54190,bytes.data(),bytes.size())==0,"native gameplay original GetOwner code changed");
+}
+thread_local const GameplayPawn* gameplay_active{};
+void gameplay_enum_disabled(Obj pawn,const wchar_t* field);
+void gameplay_layouts(){
+    layouts();if(gameplay_layouts_verified)return;
+    layout(L"/Script/CoreUObject.Rotator",24,{{L"Pitch",L"DoubleProperty",0,8,nullptr},{L"Yaw",L"DoubleProperty",8,8,nullptr},{L"Roll",L"DoubleProperty",16,8,nullptr}});
+    layout(L"/Script/Engine.TViewTarget",0x820,{{L"Target",L"ObjectProperty",0,8,nullptr}});gameplay_layouts_verified=true;
+}
+
+LookupEntry gameplay_path(Obj object){
+    LookupEntry path;require(source_package_name!=nullptr,"native gameplay package metadata unavailable");path.package=*source_package_name;
+    auto node=lookup_node(get(object),path,false,nullptr);
+    for(;;){require(path.original.size()<64,"native gameplay original path bound");
+        for(const auto& old:path.original)require(old.address!=node.address,"native gameplay original path cycle");
+        path.original.push_back(node);const auto* pointer=lookup_node_get(node,path.zero_item);
+        const auto* flags=retirement_flags(pointer);const auto* class_flags=retirement_flags(vt->resolve(node.class_weak));
+        require(flags&&class_flags,"native gameplay original flags unavailable");path.flags.push_back(*flags);path.class_flags.push_back(*class_flags);
+        const auto* outer=source_outer(pointer);require(outer,"native gameplay original Outer unavailable");
+        if(!*outer)break;node=lookup_node(const_cast<void*>(*outer),path,true,nullptr);
+    }
+    path.pinned=path.original;lookup_pin(path);lookup_entry_final(path);return path;
+}
+void gameplay_pure(const GameplayPawn& entry){
+    lookup_entry_final(entry.world_path);lookup_entry_final(entry.controller_path);lookup_entry_final(entry.pawn_path);
+    const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
+    const auto* outer=source_outer(pawn);require(outer&&reinterpret_cast<uint64_t>(*outer)==entry.level.address,"native gameplay original level changed");
+    const auto* level=vt->resolve(entry.level.weak);require(level&&reinterpret_cast<uint64_t>(level)==entry.level.address,"native gameplay original level expired");
+    void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+entry.level_world.offset,8);
+    require(reinterpret_cast<uint64_t>(world)==entry.world.address,"native gameplay original world changed");
+    if(entry.stage>=3&&entry.own){
+        const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
+        void* owned{};void* controller{};
+        std::memcpy(&owned,static_cast<const uint8_t*>(pc)+entry.controller_pawn.offset,8);
+        std::memcpy(&controller,static_cast<const uint8_t*>(pawn)+entry.pawn_controller.offset,8);
+        require(reinterpret_cast<uint64_t>(owned)==entry.pawn.address&&reinterpret_cast<uint64_t>(controller)==entry.controller.address,
+            "native gameplay original possession changed");
+    }
+}
+void gameplay_call_guard(){
+    if(!gameplay_active)return;
+    for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,gameplay_active->world))gameplay_pure(entry);}
+    gameplay_pure(*gameplay_active);
+}
+struct GameplayWatch {
+    const GameplayPawn* previous{gameplay_active};
+    explicit GameplayWatch(const GameplayPawn& entry){gameplay_pure(entry);gameplay_active=&entry;}
+    ~GameplayWatch(){gameplay_active=previous;}
+};
+GameplayPawn& gameplay_entry(uint64_t handle){const auto it=gameplay_pawns.find(handle);require(handle&&it!=gameplay_pawns.end(),"native gameplay original handle unavailable");return it->second;}
+void gameplay_local(const GameplayPawn& entry,HsmpViewResult* result){
+    require(same(actor_world(entry.controller,result),entry.world),"native gameplay original controller world changed");
+    Function local(L"/Script/Engine.Controller:IsLocalController");local.call(entry.controller,result);
+    require(local.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay local controller required");
+    require(same(actor_world(entry.pawn,result),entry.world),"native gameplay original pawn world changed");
+    require(vt->class_of(get(entry.pawn))==get(entry.actor_class),"native gameplay original Willie class changed");
+    gameplay_pure(entry);
+}
+int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
+    const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);Obj created{};
+    try{initialize_result(result);thread();OperationScope scope(guard,world);layouts();
+        require(initial&&handle&&pawn&&own<=1,"native gameplay begin arguments");*handle=0;*pawn={};
+        require(gameplay_pawns.size()<32,"native gameplay pawn bound");
+        const auto path=text(class_path);require(path==L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C","native gameplay exact Willie class required");
+        auto cls=find(path.c_str());require(is(controller,L"/Script/Engine.PlayerController")&&same(actor_world(controller,result),world),"native gameplay controller qualification");
+        Function local(L"/Script/Engine.Controller:IsLocalController");local.call(controller,result);
+        require(local.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay local controller required");
+        Function begin(L"/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass");
+        begin.object(L"WorldContextObject",world);begin.object(L"ActorClass",cls,true);begin.put(L"SpawnTransform",L"StructProperty",engine(*initial),L"Transform");
+        begin.enumeration(L"CollisionHandlingOverride",1);begin.object(L"Owner",{});begin.enumeration(L"TransformScaleMethod",0);
+        begin.call(find(L"/Script/Engine.Default__GameplayStatics"),result);created=begin.returned();
+        require(created.weak&&vt->class_of(get(created))==get(cls)&&same(actor_world(created,result),world),"native gameplay deferred Willie qualification");
+        // These replicas have no native AI authority and do not steal a local
+        // controller during construction; possession is a qualified later stage.
+        gameplay_enum_disabled(created,L"AutoPossessAI");gameplay_enum_disabled(created,L"AutoPossessPlayer");
+        GameplayPawn entry;entry.world=world;entry.controller=controller;entry.pawn=created;entry.actor_class=cls;entry.initial=*initial;entry.own=own;entry.stage=1;
+        entry.level=returned(created,L"/Script/Engine.Actor:GetLevel",result);entry.level_world=property(entry.level,L"OwningWorld",L"ObjectProperty",8);
+        entry.controller_pawn=property(controller,L"Pawn",L"ObjectProperty",8);entry.pawn_controller=property(created,L"Controller",L"ObjectProperty",8);
+        entry.world_path=gameplay_path(world);entry.controller_path=gameplay_path(controller);entry.pawn_path=gameplay_path(created);
+        gameplay_pure(entry);lookup_finish();require(gameplay_next_handle!=0,"native gameplay handle exhausted");
+        const auto key=gameplay_next_handle++;gameplay_pawns.emplace(key,std::move(entry));*handle=key;*pawn=created;result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());
+        // A failed begin exposes no handle. Destroy only its original returned
+        // actor while the caller's admission still holds; never search by name.
+        if(created.weak){try{OperationScope cleanup(guard,world);destroy_actor(world,created);}catch(...){}}
+        return -1;}
+}
+int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+        require(pawn!=nullptr,"native gameplay pawn output missing");gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);*pawn=entry.pawn;result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());return -1;}
+}
+int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+        require(pawn&&entry.stage==1,"native gameplay construction stage");gameplay_local(entry,result);
+        Function finish(L"/Script/Engine.GameplayStatics:FinishSpawningActor");finish.object(L"Actor",entry.pawn);
+        finish.put(L"SpawnTransform",L"StructProperty",engine(entry.initial),L"Transform");finish.enumeration(L"TransformScaleMethod",0);
+        finish.call(find(L"/Script/Engine.Default__GameplayStatics"),result);require(same(finish.returned(),entry.pawn),"native gameplay construction returned another pawn");
+        gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);entry.stage=2;*pawn=entry.pawn;result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());return -1;}
+}
+int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+        require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
+        if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
+            require(same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)&&same(object_property(entry.pawn,L"Controller"),entry.controller),"native gameplay possession readback failed");}
+        else require(!object_property(entry.pawn,L"Controller").weak,"native gameplay remote pawn unexpectedly possessed");
+        Function disable(L"/Script/Engine.Actor:DisableInput");disable.object(L"PlayerController",entry.controller);disable.call(entry.pawn,result);
+        // Remove the actor's native input stack, so local keys cannot execute
+        // unacknowledged damage. Accepted movement is replayed explicitly.
+        if(entry.own){Function move(L"/Script/Engine.Controller:ResetIgnoreMoveInput");move.call(entry.controller,result);
+            Function look(L"/Script/Engine.Controller:ResetIgnoreLookInput");look.call(entry.controller,result);}
+        entry.stage=3;gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());return -1;}
+}
+void gameplay_value(Obj pawn,const wchar_t* field,const HsmpGameplayValue& expected){
+    require(expected.pad==0&&std::isfinite(expected.value)&&(expected.kind==1||expected.kind==2),"native gameplay exact vital type unavailable");
+    const auto type=expected.kind==1?L"FloatProperty":L"DoubleProperty";
+    const auto bytes=expected.kind==1?4:8;const auto schema=property(pawn,field,type,bytes);
+    auto* output=static_cast<uint8_t*>(get(pawn))+schema.offset;
+    if(expected.kind==1){const float value=static_cast<float>(expected.value);require(std::isfinite(value)&&static_cast<double>(value)==expected.value,"native gameplay f32 vital precision");std::memcpy(output,&value,4);}
+    else std::memcpy(output,&expected.value,8);
+    get(pawn);
+}
+void gameplay_value_readback(Obj pawn,const wchar_t* field,const HsmpGameplayValue& expected){
+    if(expected.kind==1){const auto actual=read<float>(pawn,field,L"FloatProperty");const float value=static_cast<float>(expected.value);require(std::memcmp(&actual,&value,4)==0,"native gameplay f32 vital readback failed");}
+    else{const auto actual=read<double>(pawn,field,L"DoubleProperty");require(std::memcmp(&actual,&expected.value,8)==0,"native gameplay f64 vital readback failed");}
+}
+using GameplayVector=std::array<double,3>;
+void gameplay_finite(const double* values){for(uint32_t i=0;i<3;++i)require(std::isfinite(values[i]),"native gameplay state nonfinite");}
+void gameplay_enum_disabled(Obj pawn,const wchar_t* field){
+    HsmpProp prop{};require(vt->obj_prop(get(pawn),u16(field),&prop)==1&&prop.size==1&&prop.offset>=0&&prop.offset<65536&&
+        (prop.cls==name(L"ByteProperty")||prop.cls==name(L"EnumProperty")),"native gameplay auto possession schema");
+    auto* byte=static_cast<uint8_t*>(get(pawn))+prop.offset;*byte=0;get(pawn);require(*byte==0,"native gameplay auto possession readback");
+}
+template<class T>T gameplay_raw(const void* object,const HsmpProp& prop){T value{};std::memcpy(&value,static_cast<const uint8_t*>(object)+prop.offset,sizeof(T));return value;}
+bool gameplay_raw_bool(const void* object,const HsmpProp& prop){require(prop.bool_mask!=0,"native gameplay bool mask missing");return (static_cast<const uint8_t*>(object)[prop.offset+prop.bool_offset]&prop.bool_mask)!=0;}
+void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame){
+    gameplay_pure(entry);gameplay_owner_code();lookup_entry_final(frame.owner_api_path);lookup_entry_final(frame.root_path);lookup_entry_final(frame.movement_path);lookup_entry_final(frame.mesh_path);lookup_entry_final(frame.asset_path);
+    const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
+    const auto* root=lookup_node_get(frame.root_path.pinned.front(),frame.root_path.zero_item);
+    const auto* movement=lookup_node_get(frame.movement_path.pinned.front(),frame.movement_path.zero_item);
+    const auto* mesh=lookup_node_get(frame.mesh_path.pinned.front(),frame.mesh_path.zero_item);
+    for(const auto* component:{root,movement,mesh}){void* owner{};std::memcpy(&owner,static_cast<const uint8_t*>(component)+0x90,8);
+        require(reinterpret_cast<uint64_t>(owner)==entry.pawn.address,"native gameplay final original component owner changed");}
+    require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pawn,frame.root_field))==frame.root.address&&gameplay_raw<void*>(root,frame.parent)==nullptr,
+        "native gameplay original root binding changed");
+    require(std::memcmp(static_cast<const uint8_t*>(root)+frame.position.offset,frame.expected.position,24)==0&&
+        std::memcmp(static_cast<const uint8_t*>(root)+frame.rotation.offset,frame.expected.rotation,24)==0&&
+        std::memcmp(static_cast<const uint8_t*>(movement)+frame.velocity.offset,frame.expected.velocity,24)==0,"native gameplay final root/velocity changed");
+    const auto vital=[pawn](const HsmpProp& prop,const HsmpGameplayValue& value){
+        if(value.kind==1){const float f=static_cast<float>(value.value);require(std::memcmp(static_cast<const uint8_t*>(pawn)+prop.offset,&f,4)==0,"native gameplay final f32 vital changed");}
+        else require(std::memcmp(static_cast<const uint8_t*>(pawn)+prop.offset,&value.value,8)==0,"native gameplay final f64 vital changed");};
+    vital(frame.health,frame.expected.health);vital(frame.stamina,frame.expected.stamina);
+    const auto skinned=gameplay_raw<void*>(mesh,frame.skinned),skeletal=gameplay_raw<void*>(mesh,frame.skeletal);
+    require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pawn,frame.mesh_field))==frame.mesh.address&&
+        reinterpret_cast<uint64_t>(skeletal?skeletal:skinned)==frame.asset.address&&gameplay_raw_bool(mesh,frame.visible)&&!gameplay_raw_bool(pawn,frame.hidden),
+        "native gameplay final native body changed");
+    if(entry.own){
+        lookup_entry_final(frame.camera_path);lookup_entry_final(frame.hud_path);
+        const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
+        const auto* camera=lookup_node_get(frame.camera_path.pinned.front(),frame.camera_path.zero_item);
+        const auto* hud=lookup_node_get(frame.hud_path.pinned.front(),frame.hud_path.zero_item);
+        const auto pending=gameplay_raw<void*>(camera,frame.pending_target);
+        require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pc,frame.manager))==frame.proof.camera_manager.address&&
+            reinterpret_cast<uint64_t>(gameplay_raw<void*>(camera,frame.pc_owner))==entry.controller.address&&
+            reinterpret_cast<uint64_t>(gameplay_raw<void*>(camera,frame.view_target))==entry.pawn.address&&
+            (!pending||reinterpret_cast<uint64_t>(pending)==entry.pawn.address),"native gameplay final owned view changed");
+        require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pc,frame.hud_field))==frame.proof.hud.address&&gameplay_raw_bool(hud,frame.show_hud),"native gameplay final native HUD changed");
+    }
+    gameplay_pure(entry);
+}
+GameplayApplied gameplay_applied_snapshot(GameplayPawn& entry,const HsmpGameplayState& expected,const HsmpGameplayProof& proof,Obj movement){
+    GameplayApplied frame;frame.expected=expected;frame.proof=proof;frame.movement=movement;
+    frame.root=object_property(entry.pawn,L"RootComponent");require(frame.root.weak&&is(frame.root,L"/Script/Engine.SceneComponent"),"native gameplay root component unavailable");
+    frame.mesh=object_property(entry.pawn,L"Mesh");frame.asset=mesh_asset(frame.mesh,nullptr);
+    gameplay_owner_code();Function owner(L"/Script/Engine.ActorComponent:GetOwner");owner.field(L"ReturnValue",L"ObjectProperty",8);
+    frame.owner_api_path=gameplay_path(owner.function);
+    for(const auto component:{frame.root,movement,frame.mesh}){
+        require(is(component,L"/Script/Engine.ActorComponent"),"native gameplay owner receiver class");
+        require(same(returned(component,L"/Script/Engine.ActorComponent:GetOwner"),entry.pawn),"native gameplay original component owner mismatch");}
+    frame.root_field=property(entry.pawn,L"RootComponent",L"ObjectProperty",8);frame.parent=property(frame.root,L"AttachParent",L"ObjectProperty",8);
+    frame.position=property(frame.root,L"RelativeLocation",L"StructProperty",24);frame.rotation=property(frame.root,L"RelativeRotation",L"StructProperty",24);
+    require(frame.position.sub==name(L"Vector")&&frame.rotation.sub==name(L"Rotator"),"native gameplay root schema");
+    frame.velocity=property(movement,L"Velocity",L"StructProperty",24);
+    frame.health=property(entry.pawn,L"Health",expected.health.kind==1?L"FloatProperty":L"DoubleProperty",expected.health.kind==1?4:8);
+    frame.stamina=property(entry.pawn,L"Stamina",expected.stamina.kind==1?L"FloatProperty":L"DoubleProperty",expected.stamina.kind==1?4:8);
+    frame.mesh_field=property(entry.pawn,L"Mesh",L"ObjectProperty",8);frame.visible=property(frame.mesh,L"bVisible",L"BoolProperty",1);frame.hidden=property(entry.pawn,L"bHidden",L"BoolProperty",1);
+    frame.skinned=property(frame.mesh,L"SkinnedAsset",L"ObjectProperty",8);frame.skeletal=property(frame.mesh,L"SkeletalMesh",L"ObjectProperty",8);
+    frame.root_path=gameplay_path(frame.root);frame.movement_path=gameplay_path(movement);frame.mesh_path=gameplay_path(frame.mesh);frame.asset_path=gameplay_path(frame.asset);
+    if(entry.own){
+        frame.manager=property(entry.controller,L"PlayerCameraManager",L"ObjectProperty",8);frame.pc_owner=property(proof.camera_manager,L"PCOwner",L"ObjectProperty",8);
+        frame.view_target=property(proof.camera_manager,L"ViewTarget",L"StructProperty",0x820);frame.pending_target=property(proof.camera_manager,L"PendingViewTarget",L"StructProperty",0x820);
+        require(frame.view_target.sub==name(L"TViewTarget")&&frame.pending_target.sub==name(L"TViewTarget"),"native gameplay view target schema");
+        frame.hud_field=property(entry.controller,L"MyHUD",L"ObjectProperty",8);frame.show_hud=property(proof.hud,L"bShowHUD",L"BoolProperty",1);
+        frame.camera_path=gameplay_path(proof.camera_manager);frame.hud_path=gameplay_path(proof.hud);
+    }
+    return frame;
+}
+uint32_t gameplay_visible_body(GameplayPawn& entry,HsmpViewResult* result){
+    // Actual native mesh asset and visibility, not a marker or actor existence.
+    const auto mesh=object_property(entry.pawn,L"Mesh");require(mesh.weak&&is(mesh,L"/Script/Engine.SkeletalMeshComponent"),"native gameplay body mesh unavailable");
+    require(same(returned(mesh,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay body owner changed");
+    Function visible(L"/Script/Engine.SceneComponent:IsVisible");visible.call(mesh,result);
+    require(visible.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0&&!bool_property(entry.pawn,L"bHidden"),"native gameplay body hidden");
+    const auto asset=mesh_asset(mesh,result);require(asset.weak&&is(asset,L"/Script/Engine.SkeletalMesh"),"native gameplay real body asset unavailable");return 1;
+}
+void gameplay_view(GameplayPawn& entry,HsmpGameplayProof& proof,HsmpViewResult* result){
+    require(same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)&&same(object_property(entry.pawn,L"Controller"),entry.controller),"native gameplay possession readback failed");proof.flags|=HSMP_GAMEPLAY_POSSESSION;
+    proof.view_target=returned(entry.controller,L"/Script/Engine.Controller:GetViewTarget",result);
+    require(same(proof.view_target,entry.pawn),"native gameplay own native view target pending");proof.flags|=HSMP_GAMEPLAY_VIEW_TARGET;
+    proof.camera_manager=object_property(entry.controller,L"PlayerCameraManager");
+    require(proof.camera_manager.weak&&is(proof.camera_manager,L"/Script/Engine.PlayerCameraManager")&&same(object_property(proof.camera_manager,L"PCOwner"),entry.controller),"native gameplay own camera manager pending");
+    Function location(L"/Script/Engine.PlayerCameraManager:GetCameraLocation");location.call(proof.camera_manager,result);const auto p=location.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");gameplay_finite(p.data());
+    Function rotation(L"/Script/Engine.PlayerCameraManager:GetCameraRotation");rotation.call(proof.camera_manager,result);const auto q=rotation.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Rotator");gameplay_finite(q.data());
+    Function fov(L"/Script/Engine.PlayerCameraManager:GetFOVAngle");fov.call(proof.camera_manager,result);const auto angle=fov.value<float>(L"ReturnValue",L"FloatProperty");require(std::isfinite(angle)&&angle>0,"native gameplay own camera POV unavailable");proof.flags|=HSMP_GAMEPLAY_CAMERA;
+    proof.hud=returned(entry.controller,L"/Script/Engine.PlayerController:GetHUD",result);
+    require(proof.hud.weak&&is(proof.hud,L"/Script/Engine.HUD")&&bool_property(proof.hud,L"bShowHUD"),"native gameplay native HUD unavailable");proof.flags|=HSMP_GAMEPLAY_HUD;
+}
+int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const HsmpViewGuard* guard,HsmpGameplayProof* proof,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+        require(state&&proof&&entry.stage==3,"native gameplay apply stage");*proof={};gameplay_finite(state->position);gameplay_finite(state->rotation);gameplay_finite(state->velocity);gameplay_local(entry,result);
+        gameplay_layouts();
+        Function transform(L"/Script/Engine.Actor:K2_SetActorLocationAndRotation");
+        GameplayVector position{},rotation{};std::copy_n(state->position,3,position.data());std::copy_n(state->rotation,3,rotation.data());
+        transform.put(L"NewLocation",L"StructProperty",position,L"Vector");transform.put(L"NewRotation",L"StructProperty",rotation,L"Rotator");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);transform.call(entry.pawn,result);
+        require(transform.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay root setter refused");
+        const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
+        require(same(returned(movement,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay movement owner changed");
+        const auto velocity=property(movement,L"Velocity",L"StructProperty",24);require(velocity.sub==name(L"Vector"),"native gameplay velocity layout");std::memcpy(static_cast<uint8_t*>(get(movement))+velocity.offset,state->velocity,24);get(movement);
+        gameplay_value(entry.pawn,L"Health",state->health);gameplay_value(entry.pawn,L"Stamina",state->stamina);
+        proof->world=entry.world;proof->pawn=entry.pawn;proof->controller=entry.controller;proof->own=entry.own;
+        proof->visible_meshes=gameplay_visible_body(entry,result);proof->flags|=HSMP_GAMEPLAY_VISIBLE_BODY;
+        if(entry.own)gameplay_view(entry,*proof,result);
+        Function p(L"/Script/Engine.Actor:K2_GetActorLocation");p.call(entry.pawn,result);const auto actual_position=p.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
+        Function q(L"/Script/Engine.Actor:K2_GetActorRotation");q.call(entry.pawn,result);const auto actual_rotation=q.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Rotator");
+        Function v(L"/Script/Engine.Actor:GetVelocity");v.call(entry.pawn,result);const auto actual_velocity=v.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
+        require(std::memcmp(actual_position.data(),state->position,24)==0&&std::memcmp(actual_rotation.data(),state->rotation,24)==0&&std::memcmp(actual_velocity.data(),state->velocity,24)==0,"native gameplay exact root/velocity readback failed");
+        gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
+        gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
+        auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement);
+        lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;return 1;
+    }catch(const std::exception& error){if(proof)*proof={};failure(result,error.what());return -1;}
+}
+int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);
+        // Teardown starts only after the active construction/apply call unwinds.
+        gameplay_local(entry,result);
+        if(entry.own&&same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)){
+            Function unpossess(L"/Script/Engine.Controller:UnPossess");unpossess.call(entry.controller,result);
+            require(!returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result).weak,"native gameplay cleanup unpossess failed");}
+        destroy_actor(entry.world,entry.pawn);gameplay_pawns.erase(handle);result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());return -1;}
+}
+void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_pawns.erase(handle);}
+int32_t gameplay_complete(const uint64_t* handles,uint32_t count,const HsmpViewGuard* guard,HsmpGameplayProof* proofs,HsmpViewResult* result){
+    const std::lock_guard lock(gameplay_mutex);
+    try{initialize_result(result);thread();require(handles&&proofs&&count>0&&count<=32&&count==gameplay_pawns.size(),"native gameplay complete roster bound");
+        auto& first=gameplay_entry(handles[0]);OperationScope scope(guard,first.world);GameplayWatch watch(first);uint32_t own{};
+        for(uint32_t index=0;index<count;++index){require(std::find(handles,handles+index,handles[index])==handles+index,"native gameplay duplicate complete handle");
+            auto& entry=gameplay_entry(handles[index]);require(entry.applied&&entry.stage==3&&same(entry.world,first.world)&&same(entry.controller,first.controller),"native gameplay complete original roster changed");own+=entry.own;}
+        require(own==1,"native gameplay complete owned human ambiguous");check_guard();lookup_finish();
+        // No callback, getter, wrapper factory or logger after this full-set pass.
+        for(uint32_t index=0;index<count;++index){const auto& entry=gameplay_entry(handles[index]);gameplay_state_pure(entry,*entry.applied);proofs[index]=entry.applied->proof;}
+        result->complete=1;return 1;
+    }catch(const std::exception& error){failure(result,error.what());return -1;}
+}
+const HsmpGameplay gameplay_provider{1,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};

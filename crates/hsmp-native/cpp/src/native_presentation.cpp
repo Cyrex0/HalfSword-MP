@@ -4,6 +4,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "native_presentation.h"
+#include "native_gameplay.h"
 #include "hsmp_native.h"
 #include <algorithm>
 #include <array>
@@ -41,6 +42,7 @@ void require(bool ok, const char* why) { if (!ok) throw Error(why); }
 thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
 void mesh_call_guard();
+void gameplay_call_guard();
 struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};void* zero_item{};};
 // Copied expectations only: no successful validation survives a pure boundary.
 struct LookupObjectWitness {HsmpNativePathNode node{};uint64_t outer{};uint32_t flags{};void* zero_item{};};
@@ -218,7 +220,7 @@ void check_guard() {
             "native game-instance identity changed");
         require(object_world && object_world(gi)==world,"native game-instance world changed");
     }
-    mesh_call_guard();
+    gameplay_call_guard();mesh_call_guard();
 }
 void thread() {
     require(vt && vt->abi == HSMP_REFLECT_ABI, "reflection unavailable");
@@ -1590,6 +1592,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 #include "native_capture_impl.h"
+#include "native_gameplay_pawn_impl.h"
 const HsmpPresentation provider{12,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets,capture_frame};
 }
 void hsmp_presentation_set_create_log(HsmpPresentationCreateLog logger){create_logger.store(logger);}
@@ -1619,5 +1622,6 @@ void hsmp_presentation_register(const HsmpReflect* reflection) {
     spline_api.variant_name=reinterpret_cast<SplineVariantName>(module?GetProcAddress(module,"?GetFName@FFieldClassVariant@Unreal@RC@@QEBA?AVFName@23@XZ"):nullptr);
     vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
     layouts_verified=false;layout_objects.clear();spline_layout_verified=false;spline_layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
+    gameplay_pawns.clear();gameplay_layouts_verified=false;hsmp_native_set_gameplay(vt?&gameplay_provider:nullptr);
     hsmp_native_set_source_path_reader(vt&&source_outer&&source_package_name&&object_name&&retirement_flags?source_path_reader:nullptr);
 }

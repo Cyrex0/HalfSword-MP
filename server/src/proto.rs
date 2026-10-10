@@ -35,6 +35,15 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
     // Additive native DTOs are network-only; the shared-memory schema stays unchanged.
     match kind {
         0x0A80 => return Some(SendMode::Ordered),
+        0x0A90 | 0x0A92 => return Some(SendMode::Ordered),
+        0x0A91 => return Some(SendMode::ReliableLatest { key: key(0x98, 0) }),
+        0x0AF0 => {
+            return match peer {
+                0x0A91 => Some(SendMode::ReliableLatest { key: key(0x98, 0) }),
+                0x0AC2 => Some(SendMode::Reliable),
+                _ => None,
+            }
+        }
         0x0A10 => return Some(SendMode::ReliableLatest { key: key(0x92, 0) }),
         0x0AC0 => return Some(SendMode::ReliableLatest { key: key(0x93, 0) }),
         0x0AC1 => return Some(SendMode::Reliable),

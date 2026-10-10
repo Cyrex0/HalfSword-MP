@@ -184,6 +184,7 @@ struct World {
 // Transient within native_sample_world only. Weak handles are resolved before
 // every reflected getter; same-world possession or mesh replacement aborts the
 // complete staged frame without another call through the earlier component.
+#[derive(Clone)]
 struct NativeGuard {
     pawn: u64, mesh: u64, pawn_address: usize, mesh_address: usize,
     mesh_property: HsmpProp, controller_property: HsmpProp,
@@ -227,6 +228,7 @@ pub struct SampleState {
     pub(crate) input: crate::worker_input::WorkerInputState,
     native_guard: Option<NativeGuard>,
     native_sampling_active: bool,
+    gameplay_directory: Option<hsmp_server::native_wire::Directory>,
     pub(crate) native_pending: Option<(hsmp_server::native_wire::World, Vec<u8>)>,
     native_bindings: HashMap<hsmp_server::native_wire::EntityRef, NativeEntityBinding>,
 }
@@ -254,6 +256,7 @@ impl Default for SampleState {
             input: Default::default(),
             native_guard: None,
             native_sampling_active: false,
+            gameplay_directory: None,
             native_pending: None,
             native_bindings: HashMap::new(),
         }
@@ -457,6 +460,7 @@ pub(crate) unsafe fn call_fn(vt: &HsmpReflect, params: &mut Params, h: (u64, [i3
 impl Native {
     pub(crate) fn native_guard_ok(&self, vt: &HsmpReflect) -> bool {
         if !self.sample.world_ok { return false; }
+        if self.sample.gameplay_directory.as_ref().is_some_and(|original|self.native_host.directory().as_ref()!=Some(original)){return false;}
         let Some(g) = &self.sample.native_guard else { return !self.sample.native_sampling_active; };
         unsafe {
             let pawn = reflect::get(vt, g.pawn);
@@ -1083,168 +1087,565 @@ impl Native {
     /// service. No pose/root/vitals slot or sidecar publication occurs here.
     /// `a={epoch,dir_seq,frame_seq,ts_ms,dt_ms,actors={epoch,id,incarnation,pawn,mesh,w1,h1,t1,w2,h2,t2,dism}[]}`.
     pub unsafe fn native_sample_world(&mut self, L: *mut lua_State) -> c_int {
+        unsafe { self.native_sample_world_impl(L, false) }
+    }
+    pub unsafe fn native_gameplay_sample(&mut self, L: *mut lua_State) -> c_int {
+        let result = unsafe { self.native_sample_world_impl(L, true) };
+        self.sample.gameplay_directory = None;
+        self.sample.native_guard = None;
+        self.sample.native_sampling_active = false;
+        result
+    }
+    unsafe fn native_sample_world_impl(&mut self, L: *mut lua_State, compact: bool) -> c_int {
         use hsmp_ipc::schema::combat::{self as vitals_schema, Vitals};
         use hsmp_pose::sample::{self as encoder, PoseArgs};
         use hsmp_server::native_wire::{EntityRef, EntitySnapshot, World as NativeWorld};
         unsafe {
-            self.sample.native_pending=None;
-            if std::env::var("HSMP_RUNTIME_ROLE").as_deref() != Ok("native_worker") { return nil_err(L, "role"); }
-            if !self.sample.world_ok || !is_table(L, 1) { return nil_err(L, "world"); }
-            let Some(directory) = self.native_host.directory() else { return nil_err(L, "native directory"); };
-            let Some(vt) = reflect::vt() else { return nil_err(L, "unavailable"); };
+            self.sample.native_pending = None;
+            if std::env::var("HSMP_RUNTIME_ROLE").as_deref() != Ok("native_worker") {
+                return nil_err(L, "role");
+            }
+            if !self.sample.world_ok || !is_table(L, 1) {
+                return nil_err(L, "world");
+            }
+            let Some(directory) = self.native_host.directory() else {
+                return nil_err(L, "native directory");
+            };
+            if compact {
+                self.sample.gameplay_directory = Some(directory.clone());
+                if self.sample.input.incomplete() {
+                    return nil_err(L, "previous gameplay execution incomplete");
+                }
+            }
+            let Some(vt) = reflect::vt() else {
+                return nil_err(L, "unavailable");
+            };
             let table = lua_absindex(L, 1);
-            let integer = |t, name: &str| { rawget_str(L, t, name); let value = arg_int(L, -1); pop(L, 1); value };
-            let number = |t, name: &str| { rawget_str(L, t, name); let value = arg_num(L, -1); pop(L, 1); value };
-            let (Some(epoch), Some(seq), Some(frame), Some(ts)) =
-                (integer(table, "epoch"), integer(table, "dir_seq"), integer(table, "frame_seq"), number(table, "ts_ms")) else { return nil_err(L, "sample fields"); };
-            if epoch as u64 != directory.epoch || seq as u64 != directory.seq as u64 || frame <= 0 || frame > u32::MAX as i64
-                || !ts.is_finite() || !(0.0..=u32::MAX as f64).contains(&ts) { return nil_err(L, "sample context"); }
+            let integer = |t, name: &str| {
+                rawget_str(L, t, name);
+                let value = arg_int(L, -1);
+                pop(L, 1);
+                value
+            };
+            let number = |t, name: &str| {
+                rawget_str(L, t, name);
+                let value = arg_num(L, -1);
+                pop(L, 1);
+                value
+            };
+            let (Some(epoch), Some(seq), Some(frame), Some(ts)) = (
+                integer(table, "epoch"),
+                integer(table, "dir_seq"),
+                integer(table, "frame_seq"),
+                number(table, "ts_ms"),
+            ) else {
+                return nil_err(L, "sample fields");
+            };
+            if epoch as u64 != directory.epoch
+                || seq as u64 != directory.seq as u64
+                || frame <= 0
+                || frame > u32::MAX as i64
+                || !ts.is_finite()
+                || !(0.0..=u32::MAX as f64).contains(&ts)
+            {
+                return nil_err(L, "sample context");
+            }
             let dt = number(table, "dt_ms").unwrap_or(0.0);
-            if !dt.is_finite() || !(0.0..=1000.0).contains(&dt) { return nil_err(L, "sample step"); }
-            if self.sample.cfg.is_none() { return nil_err(L, "not configured"); }
-            if let Err(error) = self.sample_verify(vt) { return nil_err(L, &format!("disabled:{error}")); }
+            if !dt.is_finite() || !(0.0..=1000.0).contains(&dt) {
+                return nil_err(L, "sample step");
+            }
+            if self.sample.cfg.is_none() {
+                return nil_err(L, "not configured");
+            }
+            if let Err(error) = self.sample_verify(vt) {
+                return nil_err(L, &format!("disabled:{error}"));
+            }
             rawget_str(L, table, "actors");
-            if !is_table(L, -1) || lua_rawlen(L, -1) as usize != directory.entities.len() { pop(L, 1); return nil_err(L, "sample actors"); }
+            if !is_table(L, -1) || lua_rawlen(L, -1) as usize != directory.entities.len() {
+                pop(L, 1);
+                return nil_err(L, "sample actors");
+            }
             let actors = lua_absindex(L, -1);
-            let classes = self.sample.world.as_ref().map(|world| world.classes).unwrap_or_default();
+            let classes = self
+                .sample
+                .world
+                .as_ref()
+                .map(|world| world.classes)
+                .unwrap_or_default();
             let class_handle = |path: &str| {
                 let object = (vt.find)(wide(path).as_ptr());
-                (!object.is_null()).then(|| reflect::keep(vt, object)).flatten()
+                (!object.is_null())
+                    .then(|| reflect::keep(vt, object))
+                    .flatten()
             };
-            let (Some(willie_class), Some(pc_class), Some(ai_class)) = (class_handle("/Game/Character/Blueprints/Willie_BP.Willie_BP_C"),
-                class_handle("/Script/Engine.PlayerController"), class_handle("/Game/Character/Blueprints/AI_BP.AI_BP_C")) else { pop(L,1);return nil_err(L,"native actor classes"); };
+            let (Some(willie_class), Some(pc_class), Some(ai_class)) = (
+                class_handle("/Game/Character/Blueprints/Willie_BP.Willie_BP_C"),
+                class_handle("/Script/Engine.PlayerController"),
+                class_handle("/Game/Character/Blueprints/AI_BP.AI_BP_C"),
+            ) else {
+                pop(L, 1);
+                return nil_err(L, "native actor classes");
+            };
             let names = self.sample_names(vt);
-            let context = hsmp_pose::posecodec::v2::Context { match_id: directory.epoch, round: 1, life: 1 };
-            let mut output = NativeWorld { epoch: directory.epoch, directory_seq: directory.seq, frame_seq: frame as u32, entities: Vec::with_capacity(directory.entities.len()) };
+            let context = hsmp_pose::posecodec::v2::Context {
+                match_id: directory.epoch,
+                round: 1,
+                life: 1,
+            };
+            let mut output = NativeWorld {
+                epoch: directory.epoch,
+                directory_seq: directory.seq,
+                frame_seq: frame as u32,
+                entities: Vec::with_capacity(directory.entities.len()),
+            };
+            let mut compact_rows = Vec::with_capacity(directory.entities.len());
+            let mut compact_guards = Vec::with_capacity(directory.entities.len());
             let mut pose = hsmp_ipc::schema::pose::PoseBuf::new_boxed();
             let mut scratch = encoder::Scratch::default();
-            self.sample.native_bindings.retain(|reference,_|directory.entities.iter().any(|entity|entity.reference==*reference));
+            self.sample.native_bindings.retain(|reference, _| {
+                directory
+                    .entities
+                    .iter()
+                    .any(|entity| entity.reference == *reference)
+            });
             for (index, entity) in directory.entities.iter().enumerate() {
-                self.sample.native_sampling_active=true;
+                self.sample.native_sampling_active = true;
                 lua_rawgeti(L, actors, index as i64 + 1);
                 let actor = lua_absindex(L, -1);
-                let result = (|| -> Result<EntitySnapshot, String> {
-                    if !is_table(L, actor) { return Err("actor table".into()); }
-                    let reference = EntityRef { epoch: integer(actor, "epoch").unwrap_or(0) as u64,
-                        id: integer(actor, "id").unwrap_or(0) as u32, incarnation: integer(actor, "incarnation").unwrap_or(0) as u32 };
-                    if reference != entity.reference { return Err("actor identity".into()); }
-                    let pointer = |field: &str| integer(actor, field).unwrap_or(0) as usize as *mut c_void;
-                    let pawn = live(vt, pointer("pawn"), willie_class).ok_or("actor pawn Willie class")?;
+                let result = (|| -> Result<Option<EntitySnapshot>, String> {
+                    if !is_table(L, actor) {
+                        return Err("actor table".into());
+                    }
+                    let reference = EntityRef {
+                        epoch: integer(actor, "epoch").unwrap_or(0) as u64,
+                        id: integer(actor, "id").unwrap_or(0) as u32,
+                        incarnation: integer(actor, "incarnation").unwrap_or(0) as u32,
+                    };
+                    if reference != entity.reference {
+                        return Err("actor identity".into());
+                    }
+                    let pointer =
+                        |field: &str| integer(actor, field).unwrap_or(0) as usize as *mut c_void;
+                    let pawn =
+                        live(vt, pointer("pawn"), willie_class).ok_or("actor pawn Willie class")?;
                     let mesh = live(vt, pointer("mesh"), classes[C_PRIM]).ok_or("actor mesh")?;
-                    rawget_str(L,actor,"pawn_name");
-                    let pawn_name=arg_str(L,-1).filter(|name|!name.is_empty()&&name.len()<=128).map(str::to_owned);pop(L,1);
-                    let pawn_name=pawn_name.ok_or("actor pawn identity")?;
-                    let pawn_weak=reflect::keep(vt,pawn).ok_or("pawn weak")?;
-                    let mesh_weak=reflect::keep(vt,mesh).ok_or("mesh weak")?;
-                    if let Some(previous)=self.sample.native_bindings.get(&reference) {
-                        if previous.pawn!=pawn_weak || previous.mesh!=mesh_weak || previous.pawn_address!=pawn as usize
-                            || previous.mesh_address!=mesh as usize || previous.name!=pawn_name {return Err("native incarnation changed".into());}
+                    rawget_str(L, actor, "pawn_name");
+                    let pawn_name = arg_str(L, -1)
+                        .filter(|name| !name.is_empty() && name.len() <= 128)
+                        .map(str::to_owned);
+                    pop(L, 1);
+                    let pawn_name = pawn_name.ok_or("actor pawn identity")?;
+                    let pawn_weak = reflect::keep(vt, pawn).ok_or("pawn weak")?;
+                    let mesh_weak = reflect::keep(vt, mesh).ok_or("mesh weak")?;
+                    if let Some(previous) = self.sample.native_bindings.get(&reference) {
+                        if previous.pawn != pawn_weak
+                            || previous.mesh != mesh_weak
+                            || previous.pawn_address != pawn as usize
+                            || previous.mesh_address != mesh as usize
+                            || previous.name != pawn_name
+                        {
+                            return Err("native incarnation changed".into());
+                        }
                     } else {
-                        self.sample.native_bindings.insert(reference,NativeEntityBinding{pawn:pawn_weak,mesh:mesh_weak,pawn_address:pawn as usize,mesh_address:mesh as usize,name:pawn_name});
+                        self.sample.native_bindings.insert(
+                            reference,
+                            NativeEntityBinding {
+                                pawn: pawn_weak,
+                                mesh: mesh_weak,
+                                pawn_address: pawn as usize,
+                                mesh_address: mesh as usize,
+                                name: pawn_name,
+                            },
+                        );
                     }
                     let object_property = |object, field: &str| -> Result<HsmpProp, String> {
                         let mut property = HsmpProp::default();
-                        if (vt.obj_prop)(object, wide(field).as_ptr(), &mut property) != 1 || property.cls != names.object_prop
-                            || property.offset < 0 || property.size != 8 { return Err(format!("actor property {field}")); }
+                        if (vt.obj_prop)(object, wide(field).as_ptr(), &mut property) != 1
+                            || property.cls != names.object_prop
+                            || property.offset < 0
+                            || property.size != 8
+                        {
+                            return Err(format!("actor property {field}"));
+                        }
                         Ok(property)
                     };
                     let mesh_property = object_property(pawn, "Mesh")?;
                     let controller_property = object_property(pawn, "Controller")?;
                     let controller_bytes = Self::prop_bytes(pawn, &controller_property);
-                    let controller_address = u64::from_le_bytes(controller_bytes[..8].try_into().map_err(|_| "controller bytes")?) as usize;
-                    if integer(actor,"controller_index") != Some(entity.controller as i64)
-                        || integer(actor,"controller") != Some(controller_address as i64) { return Err("actor controller assignment".into()); }
-                    if controller_address == 0 || live(vt,controller_address as *mut c_void,
-                        if entity.kind==hsmp_server::native_wire::HUMAN {pc_class}else{ai_class}).is_none() { return Err("actor controller class".into()); }
-                    let controller = if controller_address == 0 { 0 } else {
-                        let pointer = live(vt, controller_address as *mut c_void, classes[C_ACTOR]).ok_or("actor controller")?;
+                    let controller_address = u64::from_le_bytes(
+                        controller_bytes[..8]
+                            .try_into()
+                            .map_err(|_| "controller bytes")?,
+                    ) as usize;
+                    if integer(actor, "controller_index") != Some(entity.controller as i64)
+                        || integer(actor, "controller") != Some(controller_address as i64)
+                    {
+                        return Err("actor controller assignment".into());
+                    }
+                    if controller_address == 0
+                        || live(
+                            vt,
+                            controller_address as *mut c_void,
+                            if entity.kind == hsmp_server::native_wire::HUMAN {
+                                pc_class
+                            } else {
+                                ai_class
+                            },
+                        )
+                        .is_none()
+                    {
+                        return Err("actor controller class".into());
+                    }
+                    let controller = if controller_address == 0 {
+                        0
+                    } else {
+                        let pointer = live(vt, controller_address as *mut c_void, classes[C_ACTOR])
+                            .ok_or("actor controller")?;
                         reflect::keep(vt, pointer).ok_or("controller weak")?
                     };
-                    let controller_pawn = if controller_address == 0 { None } else { Some(object_property(controller_address as *mut c_void, "Pawn")?) };
-                    self.sample.native_guard = Some(NativeGuard { pawn:pawn_weak,
-                        mesh:mesh_weak, pawn_address: pawn as usize, mesh_address: mesh as usize,
-                        mesh_property, controller_property, controller, controller_address, controller_pawn });
-                    if !self.native_guard_ok(vt) { return Err("actor binding".into()); }
-                    let (position, rotation, velocity) = self.actor_state(vt, pawn).ok_or("actor root")?;
-                    let root_args = [frame as f64, ts, position[0], position[1], position[2], rotation[0], rotation[1], rotation[2], velocity[0], velocity[1], velocity[2]];
-                    let mut root = encoder::root(&root_args, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |duration| duration.as_millis() as u64));
-                    root.match_id = directory.epoch; root.round = 1; root.life = 1;
-                    let nobody = self.sample.cfg.as_ref().map(|config| config.nobody.clone()).unwrap_or_default();
+                    let controller_pawn = if controller_address == 0 {
+                        None
+                    } else {
+                        Some(object_property(controller_address as *mut c_void, "Pawn")?)
+                    };
+                    self.sample.native_guard = Some(NativeGuard {
+                        pawn: pawn_weak,
+                        mesh: mesh_weak,
+                        pawn_address: pawn as usize,
+                        mesh_address: mesh as usize,
+                        mesh_property,
+                        controller_property,
+                        controller,
+                        controller_address,
+                        controller_pawn,
+                    });
+                    if !self.native_guard_ok(vt) {
+                        return Err("actor binding".into());
+                    }
+                    let (position, rotation, velocity) =
+                        self.actor_state(vt, pawn).ok_or("actor root")?;
+                    if compact {
+                        use hsmp_server::native_gameplay_wire::{NativeScalar, State};
+                        let mut values = Vec::with_capacity(2);
+                        for field in ["Health", "Stamina"] {
+                            if !self.native_guard_ok(vt) {
+                                return Err("gameplay original actor changed".into());
+                            }
+                            let mut property = HsmpProp::default();
+                            if (vt.obj_prop)(pawn, wide(field).as_ptr(), &mut property) != 1
+                                || property.offset < 0
+                            {
+                                return Err(format!("native gameplay {field} unavailable"));
+                            }
+                            if !self.native_guard_ok(vt) {
+                                return Err("gameplay stat admission changed".into());
+                            }
+                            let value = if property.cls == names.float_prop && property.size == 4 {
+                                NativeScalar::F32(u32::from_le_bytes(
+                                    Self::prop_bytes(pawn, &property)
+                                        .try_into()
+                                        .map_err(|_| "gameplay f32 bytes")?,
+                                ))
+                            } else if property.cls == names.double_prop && property.size == 8 {
+                                NativeScalar::F64(u64::from_le_bytes(
+                                    Self::prop_bytes(pawn, &property)
+                                        .try_into()
+                                        .map_err(|_| "gameplay f64 bytes")?,
+                                ))
+                            } else {
+                                return Err(format!("native gameplay {field} type"));
+                            };
+                            value.validate().map_err(str::to_owned)?;
+                            values.push(value);
+                        }
+                        let ack = self.sample.input.execution(reference);
+                        let (buttons, axes) = self.sample.input.effective(reference, pawn as usize, controller_address)
+                            .ok_or("gameplay effective input unavailable")?;
+                        compact_rows.push(State {
+                            reference,
+                            request_seq: ack.seq,
+                            delivery_seq: ack.delivery_seq,
+                            buttons,
+                            axes,
+                            position,
+                            rotation,
+                            velocity,
+                            health: values[0],
+                            stamina: values[1],
+                        });
+                        compact_guards.push(
+                            self.sample
+                                .native_guard
+                                .clone()
+                                .ok_or("gameplay native guard")?,
+                        );
+                        if !self.native_guard_ok(vt) {
+                            return Err("gameplay source final changed".into());
+                        }
+                        return Ok(None);
+                    }
+                    let root_args = [
+                        frame as f64,
+                        ts,
+                        position[0],
+                        position[1],
+                        position[2],
+                        rotation[0],
+                        rotation[1],
+                        rotation[2],
+                        velocity[0],
+                        velocity[1],
+                        velocity[2],
+                    ];
+                    let mut root = encoder::root(
+                        &root_args,
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |duration| duration.as_millis() as u64),
+                    );
+                    root.match_id = directory.epoch;
+                    root.round = 1;
+                    root.life = 1;
+                    let nobody = self
+                        .sample
+                        .cfg
+                        .as_ref()
+                        .map(|config| config.nobody.clone())
+                        .unwrap_or_default();
                     for (bone, no_body) in nobody.iter().enumerate().take(NBONES) {
-                        if !self.sample_bone(vt, mesh, bone, *no_body) { return Err("actor bone".into()); }
+                        if !self.sample_bone(vt, mesh, bone, *no_body) {
+                            return Err("actor bone".into());
+                        }
                     }
                     let mut weapon_count = 0;
                     for (field, hands, tag) in [("w1", "h1", "t1"), ("w2", "h2", "t2")] {
                         let weapon = pointer(field);
-                        if weapon.is_null() { continue; }
-                        let values = self.sample_weapon(vt, mesh, weapon, number(actor, hands).unwrap_or(0.0), number(actor, tag).unwrap_or(0.0)).ok_or("actor weapon")?;
-                        self.sample.weapons[weapon_count] = values; weapon_count += 1;
+                        if weapon.is_null() {
+                            continue;
+                        }
+                        let values = self
+                            .sample_weapon(
+                                vt,
+                                mesh,
+                                weapon,
+                                number(actor, hands).unwrap_or(0.0),
+                                number(actor, tag).unwrap_or(0.0),
+                            )
+                            .ok_or("actor weapon")?;
+                        self.sample.weapons[weapon_count] = values;
+                        weapon_count += 1;
                     }
-                    if !self.sample_control(vt, pawn) || !self.native_guard_ok(vt) { return Err("actor control".into()); }
+                    if !self.sample_control(vt, pawn) || !self.native_guard_ok(vt) {
+                        return Err("actor control".into());
+                    }
                     let bones = *self.sample.bones;
                     let weapons = self.sample.weapons;
                     let control = self.sample.control;
-                    if !encoder::encode_pose_with_context(&PoseArgs { tick: frame as f64, ts, dt, b: &bones, w: &weapons[..weapon_count], c: Some(&control) },
-                        &mut scratch, &mut pose, &[], None, Some(context)) { return Err("actor pose".into()); }
-                    let mut vitals = Vitals { seq: frame as u32, dism: integer(actor, "dism").unwrap_or(0) as u32,
-                        flags: 0, v: [vitals_schema::VITALS_UNKNOWN; vitals_schema::VITALS_N], match_id: directory.epoch, round: 1, life: 1, _life_r: [0; 2] };
-                    if vitals.dism & !vitals_schema::DISM_ALL != 0 { return Err("actor sever mask".into()); }
+                    if !encoder::encode_pose_with_context(
+                        &PoseArgs {
+                            tick: frame as f64,
+                            ts,
+                            dt,
+                            b: &bones,
+                            w: &weapons[..weapon_count],
+                            c: Some(&control),
+                        },
+                        &mut scratch,
+                        &mut pose,
+                        &[],
+                        None,
+                        Some(context),
+                    ) {
+                        return Err("actor pose".into());
+                    }
+                    let mut vitals = Vitals {
+                        seq: frame as u32,
+                        dism: integer(actor, "dism").unwrap_or(0) as u32,
+                        flags: 0,
+                        v: [vitals_schema::VITALS_UNKNOWN; vitals_schema::VITALS_N],
+                        match_id: directory.epoch,
+                        round: 1,
+                        life: 1,
+                        _life_r: [0; 2],
+                    };
+                    if vitals.dism & !vitals_schema::DISM_ALL != 0 {
+                        return Err("actor sever mask".into());
+                    }
                     for (i, field) in vitals_schema::VITALS_NAMES.iter().enumerate() {
-                        if !self.native_guard_ok(vt) { return Err("actor binding".into()); }
+                        if !self.native_guard_ok(vt) {
+                            return Err("actor binding".into());
+                        }
                         let mut property = HsmpProp::default();
-                        if (vt.obj_prop)(pawn, wide(field).as_ptr(), &mut property) != 1 || property.offset < 0
-                            || !((property.cls == names.double_prop && property.size == 8) || (property.cls == names.float_prop && property.size == 4)) {
-                            if i==0 {return Err("native Health unavailable".into());} continue;
+                        if (vt.obj_prop)(pawn, wide(field).as_ptr(), &mut property) != 1
+                            || property.offset < 0
+                            || !((property.cls == names.double_prop && property.size == 8)
+                                || (property.cls == names.float_prop && property.size == 4))
+                        {
+                            if i == 0 {
+                                return Err("native Health unavailable".into());
+                            }
+                            continue;
                         }
                         let value = self.read_num(pawn, Some(property));
-                        if !value.is_finite() { if i==0 {return Err("native Health invalid".into());} continue; }
+                        if !value.is_finite() {
+                            if i == 0 {
+                                return Err("native Health invalid".into());
+                            }
+                            continue;
+                        }
                         vitals.v[i] = vitals_schema::vitals_q(i, value as f32);
                     }
-                    const FLAGS: [(&str, u16); 17] = [("DED",1),("Fallen",2),("Downed",4),("Headless",8),("Pain Shock",16),
-                        ("Head Broken",32),("Neck Snapped",64),("Neck Dislocated",64),("Back Broken",128),("Spine Dislocated",128),
-                        ("Arm R Broken",256),("Arm R Dislocated",256),("Arm L Broken",512),("Arm L Dislocated",512),
-                        ("Leg R Broken",1024),("Leg R Dislocated",1024),("Leg L Broken",2048)];
-                    for (field, flag) in FLAGS.into_iter().chain(std::iter::once(("Leg L Dislocated",2048))) {
-                        if !self.native_guard_ok(vt) { return Err("actor binding".into()); }
+                    const FLAGS: [(&str, u16); 17] = [
+                        ("DED", 1),
+                        ("Fallen", 2),
+                        ("Downed", 4),
+                        ("Headless", 8),
+                        ("Pain Shock", 16),
+                        ("Head Broken", 32),
+                        ("Neck Snapped", 64),
+                        ("Neck Dislocated", 64),
+                        ("Back Broken", 128),
+                        ("Spine Dislocated", 128),
+                        ("Arm R Broken", 256),
+                        ("Arm R Dislocated", 256),
+                        ("Arm L Broken", 512),
+                        ("Arm L Dislocated", 512),
+                        ("Leg R Broken", 1024),
+                        ("Leg R Dislocated", 1024),
+                        ("Leg L Broken", 2048),
+                    ];
+                    for (field, flag) in FLAGS
+                        .into_iter()
+                        .chain(std::iter::once(("Leg L Dislocated", 2048)))
+                    {
+                        if !self.native_guard_ok(vt) {
+                            return Err("actor binding".into());
+                        }
                         let mut property = HsmpProp::default();
-                        if (vt.obj_prop)(pawn, wide(field).as_ptr(), &mut property) == 1 && property.offset >= 0 && property.cls == names.bool_prop
-                            && self.read_flag(pawn, Some(property)) { vitals.flags |= flag; }
+                        if (vt.obj_prop)(pawn, wide(field).as_ptr(), &mut property) == 1
+                            && property.offset >= 0
+                            && property.cls == names.bool_prop
+                            && self.read_flag(pawn, Some(property))
+                        {
+                            vitals.flags |= flag;
+                        }
                     }
-                    if vitals.v[0] == 0 { vitals.flags |= vitals_schema::VF_DEAD; }
-                    if !self.native_guard_ok(vt) { return Err("actor binding".into()); }
-                    Ok(EntitySnapshot { reference, root, vitals, pose: pose.used().to_vec() })
+                    if vitals.v[0] == 0 {
+                        vitals.flags |= vitals_schema::VF_DEAD;
+                    }
+                    if !self.native_guard_ok(vt) {
+                        return Err("actor binding".into());
+                    }
+                    Ok(Some(EntitySnapshot {
+                        reference,
+                        root,
+                        vitals,
+                        pose: pose.used().to_vec(),
+                    }))
                 })();
                 self.sample.native_guard = None;
-                self.sample.native_sampling_active=false;
+                self.sample.native_sampling_active = false;
                 pop(L, 1);
-                match result { Ok(snapshot) => output.entities.push(snapshot), Err(error) => { pop(L, 1); return nil_err(L, &error); } }
+                match result {
+                    Ok(Some(snapshot)) => output.entities.push(snapshot),
+                    Ok(None) => {}
+                    Err(error) => {
+                        pop(L, 1);
+                        return nil_err(L, &error);
+                    }
+                }
             }
             pop(L, 1);
-            let Some(world_key)=self.world_key.clone() else{return nil_err(L,"native world key");};
-            self.sample.native_pending=Some((output,world_key));
-            lua_pushboolean(L,1);1
+            let Some(world_key) = self.world_key.clone() else {
+                return nil_err(L, "native world key");
+            };
+            if compact {
+                for original in compact_guards {
+                    self.sample.native_guard = Some(original);
+                    if !self.native_guard_ok(vt) {
+                        return nil_err(L, "gameplay whole roster changed");
+                    }
+                }
+                self.sample.native_guard = None;
+                if !self.native_guard_ok(vt) || self.world_key.as_ref() != Some(&world_key) {
+                    return nil_err(L, "gameplay final generation changed");
+                }
+                let result = hsmp_server::native_gameplay_wire::ResultFrame {
+                    epoch: directory.epoch,
+                    directory_seq: directory.seq,
+                    authority_tick: frame as u32,
+                    entities: compact_rows,
+                };
+                return match self
+                    .native_host
+                    .host
+                    .as_ref()
+                    .ok_or("not a native host")
+                    .and_then(|h| h.publish_gameplay(result))
+                {
+                    Ok(()) => {
+                        lua_pushboolean(L, 1);
+                        1
+                    }
+                    Err(reason) => nil_err(L, reason),
+                };
+            }
+            self.sample.native_pending = Some((output, world_key));
+            lua_pushboolean(L, 1);
+            1
         }
     }
 
     /// Publish only after the Lua worker requalifies its original world token
     /// and the complete native-asset set passes its final pure census.
-    pub unsafe fn native_commit_world(&mut self,L:*mut lua_State)->c_int {
+    pub unsafe fn native_commit_world(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
-            if std::env::var("HSMP_RUNTIME_ROLE").as_deref()!=Ok("native_worker"){return nil_err(L,"role");}
-            let Some((world,key))=self.sample.native_pending.take() else{return nil_err(L,"no staged world");};
-            if !self.sample.world_ok || self.world_key.as_deref()!=Some(key.as_slice()){return nil_err(L,"world");}
-            let render=self.presentation.pending.take();
-            let generation=(world.epoch,world.directory_seq,world.frame_seq);
-            if let Some(render)=render.as_ref(){
-                if (render.world.epoch,render.world.directory_seq,render.world.frame_seq)!=generation{return nil_err(L,"render/core staging generation");}
-                if let Err(error)=self.finish_native_vertices(render){return nil_err(L,&error);}
+            if std::env::var("HSMP_RUNTIME_ROLE").as_deref() != Ok("native_worker") {
+                return nil_err(L, "role");
             }
-            match self.native_host.publish_world(world){Ok(())=>{
-                if let Some(render)=render {
-                    if (render.world.epoch,render.world.directory_seq,render.world.frame_seq)!=generation{return nil_err(L,"render/core staging generation");}
-                    if let Some(host)=self.native_host.host.as_ref(){if let Err(error)=host.publish_render(render){return nil_err(L,error);}}
+            let Some((world, key)) = self.sample.native_pending.take() else {
+                return nil_err(L, "no staged world");
+            };
+            if !self.sample.world_ok || self.world_key.as_deref() != Some(key.as_slice()) {
+                return nil_err(L, "world");
+            }
+            let render = self.presentation.pending.take();
+            let generation = (world.epoch, world.directory_seq, world.frame_seq);
+            if let Some(render) = render.as_ref() {
+                if (
+                    render.world.epoch,
+                    render.world.directory_seq,
+                    render.world.frame_seq,
+                ) != generation
+                {
+                    return nil_err(L, "render/core staging generation");
                 }
-                lua_pushboolean(L,1);1},Err(error)=>nil_err(L,error)}
+                if let Err(error) = self.finish_native_vertices(render) {
+                    return nil_err(L, &error);
+                }
+            }
+            match self.native_host.publish_world(world) {
+                Ok(()) => {
+                    if let Some(render) = render {
+                        if (
+                            render.world.epoch,
+                            render.world.directory_seq,
+                            render.world.frame_seq,
+                        ) != generation
+                        {
+                            return nil_err(L, "render/core staging generation");
+                        }
+                        if let Some(host) = self.native_host.host.as_ref() {
+                            if let Err(error) = host.publish_render(render) {
+                                return nil_err(L, error);
+                            }
+                        }
+                    }
+                    lua_pushboolean(L, 1);
+                    1
+                }
+                Err(error) => nil_err(L, error),
+            }
         }
     }
 

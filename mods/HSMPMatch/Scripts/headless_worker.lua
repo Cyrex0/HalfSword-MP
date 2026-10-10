@@ -28,6 +28,7 @@ function M.start()
     local bind = os.getenv("HSMP_NATIVE_BIND") or "127.0.0.1:7777"
     local boot_only = os.getenv("HSMP_NATIVE_BOOT_ONLY") == "1"
     local native_mode = os.getenv("HSMP_NATIVE_MODE") or "pvp"
+    local gameplay = os.getenv("HSMP_NATIVE_GAMEPLAY") == "1"
     IPC.init({ mod = "HSMPMatch", state_dir = state_dir, log = log })
     local N = IPC.N
     if not N or not N.worker_input then log("startup refused: native input binding unavailable"); return end
@@ -43,6 +44,7 @@ function M.start()
     local RVP = RVPModule and RVPModule.new({ log = log, ev = function(name, fields) if HL then HL.event(name, fields) end end })
     if RVP then pcall(function() RegisterLoadMapPreHook(function() RVP.on_loadmap() end) end) end
     local stopped, hosted, last_key, last_state, last_report = false, false, nil, nil, -1e9
+    local codec_reported=false
     local cancel_reason, cancel_fault, last_cancel_poll = nil, nil, -1e9
     local bootstrap, controller, loop_handle, source_lifecycle
     local sample_configured, frame_seq, sample_attempt_at, first_ai_name = false, 0, -1e9, nil
@@ -431,7 +433,7 @@ function M.start()
         end
     end
     local control_bindings = {resolve=resolve,prepare=function(index)return preparation:prepare(index)end}
-    controller = Control.new({ now_ms = function() return os.clock() * 1000 end,
+    controller = Control.new({ ordered=gameplay, now_ms = function() return os.clock() * 1000 end,
         running = function() return not stopped and bootstrap and bootstrap.state == "native_ready" and WG.check() and WG.settled() end,
         binding = function(row)
             return Control.fresh_binding(row,control_bindings)
@@ -439,8 +441,12 @@ function M.start()
         same = function(binding)
             return not stopped and Control.binding_matches(binding,control_bindings)
         end,
-        invoke = function(binding, axes, changed, buttons)
-            local accepted, why = N.worker_input({ pawn = binding.pawn_address, controller = binding.pc_address, axes = axes, changed = changed, buttons = buttons })
+        invoke = function(binding, axes, changed, buttons, request)
+            local args = {pawn=binding.pawn_address,controller=binding.pc_address,axes=axes,changed=changed,buttons=buttons}
+            if request and request.flags~=1 then
+                for _,field in ipairs({"epoch","id","incarnation","seq","delivery_seq"}) do args[field]=request[field] end
+            end
+            local accepted, why = N.worker_input(args)
             if accepted == true then
                 metrics.dispatch = metrics.dispatch + 1
                 local active = changed ~= 0 or buttons ~= 0
@@ -459,7 +465,9 @@ function M.start()
         end,
     })
     local function sample_world(directory)
-        if not N.native_sample_world or not N.sample_config then return false, "canonical sampler unavailable" end
+        local sampler
+        if gameplay then sampler=N.native_gameplay_sample else sampler=N.native_sample_world end
+        if not sampler or not N.sample_config then return false, "canonical sampler unavailable" end
         if not sample_configured then
             local context={epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq+1}
             source_phase(context,"sample_config","enter")
@@ -470,7 +478,7 @@ function M.start()
         end
         local token, actors = WG.token(), {}
         if native_mode ~= "diagnostic" then
-            if not N.host_describe or not N.native_capture_render then return false, "native source/render APIs unavailable" end
+            if not N.host_describe or (not gameplay and not N.native_capture_render) then return false, "native source/render APIs unavailable" end
             for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do
                 if type(N[name])~="function"then return false,"native source identity API unavailable: "..name end
             end
@@ -505,19 +513,21 @@ function M.start()
             entity_bindings[reference] = binding_key
             local actor = { epoch=row.epoch, id=row.id, incarnation=row.incarnation, pawn=address, mesh=mesh:GetAddress(),
                 controller=binding.pc_address,controller_index=row.controller,pawn_name=name,dism=0 }
-            local seen, count = {}, 0
-            local two_handed = pawn["R Two Handed Grip"] == true
-            for _, hand in ipairs({ "R", "L" }) do
-                local weapon = pawn["Weapon " .. hand]
-                if weapon and weapon:IsValid() and not seen[weapon:GetAddress()] then
-                    local class = weapon:GetClass():GetFName():ToString()
-                    if not class:find("Fists", 1, true) then
-                        seen[weapon:GetAddress()] = true; count = count + 1
-                        actor["w"..count] = weapon:GetAddress()
-                        actor["h"..count] = hand == "R" and (two_handed and 3 or 1) or 2
-                        -- Geometry is available; canonical gear/recipe metadata
-                        -- needs the separate native descriptor contract.
-                        actor["t"..count] = 0
+            if not gameplay then
+                local seen, count = {}, 0
+                local two_handed = pawn["R Two Handed Grip"] == true
+                for _, hand in ipairs({ "R", "L" }) do
+                    local weapon = pawn["Weapon " .. hand]
+                    if weapon and weapon:IsValid() and not seen[weapon:GetAddress()] then
+                        local class = weapon:GetClass():GetFName():ToString()
+                        if not class:find("Fists", 1, true) then
+                            seen[weapon:GetAddress()] = true; count = count + 1
+                            actor["w"..count] = weapon:GetAddress()
+                            actor["h"..count] = hand == "R" and (two_handed and 3 or 1) or 2
+                            -- Geometry is available; canonical gear/recipe metadata
+                            -- needs the separate native descriptor contract.
+                            actor["t"..count] = 0
+                        end
                     end
                 end
             end
@@ -527,6 +537,21 @@ function M.start()
         frame_seq = frame_seq + 1
         local now_ms = os.clock()*1000
         local before = os.clock()*1000
+        if gameplay then
+            -- The compact sampler publishes exact native root/stat values after
+            -- checking the complete original roster. Recipes are bootstrap data;
+            -- neither full component poses nor RenderWorld replay enters this path.
+            source_phase({epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq},"gameplay_sample","enter")
+            local ok, why = sampler({epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,
+                ts_ms=now_ms,dt_ms=0,actors=actors})
+            source_phase({epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq},"gameplay_sample","exit",{ok=ok==true,reason=tostring(why or "")})
+            local elapsed=os.clock()*1000-before
+            if ok==true then
+                metrics.sample_min_ms=math.min(metrics.sample_min_ms or elapsed,elapsed)
+                metrics.sample_max_ms=math.max(metrics.sample_max_ms,elapsed)
+            end
+            return ok==true,why
+        end
         local ok, why = Boundary.sample({sample=N.native_sample_world,commit=N.native_commit_world,same=WG.same,
             phase=source_phase,
             render=native_mode~="diagnostic" and N.native_capture_render or nil,allow_core_only=native_mode=="diagnostic",
@@ -597,6 +622,7 @@ function M.start()
                     controller:tick() -- identify the pawn before accepting its first input
                     if cancel_reason then return end
                     for _, frame in ipairs(N.host_inputs(32) or {}) do controller:receive(frame) end
+                    if gameplay then controller:tick() end -- execute all admitted edges in order before sampling ACKs
                     source_phase(context,"native_control","exit")
                     local attempt_at=os.clock()*1000
                     if attempt_at-sample_attempt_at >= 33 then
@@ -618,7 +644,8 @@ function M.start()
                             if why~="source descriptor retry pending" or not metrics.last_sample_error then
                                 if why~=metrics.last_sample_error then log("canonical sample refused: %s",tostring(why));metrics.last_sample_error=why end
                             end
-                            if why=="canonical incarnation changed" or why=="native incarnation changed" or why=="native Health unavailable" or why=="native Health invalid" then
+                            if why=="canonical incarnation changed" or why=="native incarnation changed" or why=="native Health unavailable" or why=="native Health invalid"
+                                or why=="previous gameplay execution incomplete" then
                                 if N.host_world_changed then N.host_world_changed() end
                                 error(why)
                             end
@@ -628,6 +655,14 @@ function M.start()
             end
             if os.clock() - last_report >= 1 then
                 last_report = os.clock()
+                if gameplay and not codec_reported and type(N.native_gameplay_metrics)=="function" then
+                    local codec=N.native_gameplay_metrics()
+                    if type(codec)=="table" and (codec.encode_samples or 0)>=8 then
+                        codec_reported=true
+                        log("compact codec: samples=%d raw_bytes=%d wire_bytes=%d encode_us=%d",codec.encode_samples,codec.raw_bytes,codec.wire_bytes,codec.encode_us)
+                        codec.state="native_compression";if HL then HL.event("x_native_worker",codec) end
+                    end
+                end
                 local rows, why = census()
                 if rows then
                     log("native census: players=%d ai=%d pc0=%s pc1=%s first_ai=%s world=%s", rows.players, rows.ai, rows.pawn0, rows.pawn1, rows.first_ai, WG.key)

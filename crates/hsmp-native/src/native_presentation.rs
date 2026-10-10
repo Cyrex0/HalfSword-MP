@@ -816,6 +816,27 @@ pub struct State {
     present_diagnostic_attempts: u32,
 }
 impl State {
+    // Match only a previously admitted source binding. This is a copied input
+    // identity seam, not a fresh address-to-entity lookup.
+    pub(crate) unsafe fn input_reference(
+        &self, vt: &HsmpReflect, directory: &w::Directory, pawn: usize, controller: usize,
+    ) -> Option<w::EntityRef> {
+        unsafe {
+            let mut matched = None;
+            for entity in &directory.entities {
+                if entity.kind != w::HUMAN { continue; }
+                let Some(source) = self.sources.get(&entity.reference) else { continue; };
+                if source.pawn.address != pawn as u64 || source.controller.address != controller as u64 { continue; }
+                if matched.is_some() || reflect::get(vt, source.world.weak) as u64 != source.world.address
+                    || reflect::get(vt, source.pawn.weak) as u64 != source.pawn.address
+                    || reflect::get(vt, source.controller.weak) as u64 != source.controller.address
+                    || read_object_property(vt, source.pawn, source.pawn_controller).ok() != Some(source.controller.address)
+                    || read_object_property(vt, source.controller, source.controller_pawn).ok() != Some(source.pawn.address) { return None; }
+                matched = Some(entity.reference);
+            }
+            matched
+        }
+    }
     fn drop_visuals(&mut self) {
         if let Ok(p) = provider() {
             for m in self.mirrors.values() {

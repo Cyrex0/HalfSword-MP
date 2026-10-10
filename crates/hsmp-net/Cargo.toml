@@ -20,6 +20,7 @@ hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
+lz4_flex = { version = "=0.14.0", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
 
 [features]
 # The deterministic impaired link (loss, duplication, jitter) for other crates' tests

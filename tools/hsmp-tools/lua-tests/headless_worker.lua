@@ -578,6 +578,74 @@ do
 end
 
 do
+    local clock,binding,success,calls,advance=1000,"pawn-a",true,{},false
+    local ordered=Control.new({ordered=true,now_ms=function()return clock end,running=function()return true end,
+        binding=function()return {key=binding}end,same=function(v)return v.key==binding end,
+        invoke=function(_,axes,changed,buttons,request)
+            calls[#calls+1]={axes={table.unpack(axes)},changed=changed,buttons=buttons,request=request}
+            if request and advance then clock=clock+250 end
+            return success
+        end})
+    local own={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,owner_peer=10,controller=0,kind=0}}}
+    ordered:set_directory(own);ordered:tick();calls={}
+    local function request(seq,buttons)
+        local r=frame(1,seq,{1,0,seq,0,0,0,0,0},buttons);r.seq=seq;return r
+    end
+    T.check(ordered:receive(request(1,1)) and ordered:receive(request(2,0)),"ordered gameplay admits press and release before one tick")
+    ordered:tick()
+    T.check(#calls==2 and calls[1].changed==1 and calls[1].buttons==1 and calls[2].changed==1 and calls[2].buttons==0,
+        "one tick preserves both native press and release in admitted order")
+    T.check(calls[1].request.seq==1 and calls[2].request.delivery_seq==2 and calls[1].axes[3]==1 and calls[2].axes[3]==2,
+        "each edge carries its exact request identity and consumes its own mouse delta once")
+    calls={};ordered:tick()
+    T.check(#calls==1 and calls[1].changed==0 and calls[1].axes[1]==1 and calls[1].axes[3]==0 and not calls[1].request,
+        "held movement has no repeated edge, mouse delta, or fabricated execution acknowledgement")
+    T.check(not ordered:receive(request(2,1)),"ordered delivery duplicates never replay an edge")
+    T.check(ordered:receive(request(3,1)),"next ordered request admitted")
+    clock=1250;calls={};ordered:tick()
+    T.check(#calls==1 and calls[1].buttons==0 and not calls[1].request,"expired queued request is never executed or acknowledged")
+    clock=1300;ordered:receive(request(4,1));binding="pawn-b";calls={};ordered:tick()
+    T.check(#calls==1 and calls[1].buttons==0 and not calls[1].request,"possession change discards queued old-pawn requests")
+    ordered:receive(request(5,1));success=false;calls={};ordered:tick()
+    local edges=0;for _,call in ipairs(calls)do if call.request then edges=edges+1 end end
+    success=true;calls={};ordered:tick()
+    T.check(edges==1 and #calls==1 and not calls[1].request,"incomplete native request is removed before callbacks and never retried")
+    local missing=request(6,0);missing.seq=nil
+    T.check(not ordered:receive(missing),"ordered gameplay requires an explicit nonzero request sequence")
+    ordered:receive(request(6,1));ordered:receive(request(7,0));calls={};advance=true
+    ordered:tick()
+    T.check(#calls==2 and calls[1].request.seq==6 and not calls[2].request and calls[2].buttons==0 and calls[2].changed==1,
+        "native callback exhausting receipt lifetime prevents next queued request ACK and releases held buttons")
+end
+
+do
+    local callback,old_calls,configs,reason=nil,0,0,nil
+    local N={worker_input=function()return true end,host_start=function()return true end,
+        host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
+        sample_config=function()configs=configs+1;return true end,
+        native_sample_world=function()old_calls=old_calls+1;return true end}
+    local world={IsValid=function()return true end}
+    local wg={key="compact-missing",check=function()return true end,settled=function()return true end,
+        world=function()return world end,token=function()return 1 end,same=function(v)return v==1 end,on_drop=function()end}
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return nil end},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
+        hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+        hsmp_log={init=function()end,event=function(name,fields)
+            if name=="x_native_worker" and fields.state=="native_evidence"then reason=fields.reason end
+        end},director={make_ue_env=function()return {apply_cvars=function()end}end,
+            new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+        headless_control={new=function()return {set_directory=function()return true end,tick=function()end}end},
+        headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics}
+    local fake=setmetatable({debug=debug,os={getenv=function(k)if k=="HSMP_NATIVE_GAMEPLAY"then return "1"end end,clock=function()return 1 end},
+        require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,print=function()end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 82 end},{__index=_G})
+    assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start();callback()
+    T.check(old_calls==0 and configs==0 and reason=="canonical sampler unavailable",
+        "explicit gameplay mode with missing compact API refuses before invoking legacy capture or configuration")
+end
+
+do
     local token,current,commits,invalidations={},true,0,0
     local env={same=function(value)return current and value==token end,
         commit=function()commits=commits+1;return true end,

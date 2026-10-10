@@ -9,27 +9,30 @@ function M.assess(info)
     if info.census_complete~=true then return false,"isolation_census_incomplete"end
     for _,p in ipairs(info.willies or{})do
         local name=value(p.name)or"unavailable"
+        local owned=info.gameplay==true and value(p.native_owned)==true
+        if owned and value(p.class)~="/Game/Character/Blueprints/Willie_BP.Willie_BP_C"then return false,"isolation_owned_class_mismatch:"..name end
         if not p.persistent or p.persistent.known~=true then return false,"isolation_persistent_tag_unavailable:"..name end
-        if p.persistent.value~=true then
+        if not owned and p.persistent.value~=true then
             if not p.retired or p.retired.known~=true or p.retired.value~=true then return false,"isolation_local_fighter:"..name end
             if not p.complete_inert or p.complete_inert.known~=true or p.complete_inert.value~=true then return false,"isolation_retired_fighter_readback:"..name end
         end
-        for _,field in ipairs({"mesh_visible","actor_collision","mesh_simulating"})do
+        for _,field in ipairs(owned and{}or{"mesh_visible","actor_collision","mesh_simulating"})do
             if not p[field]or p[field].known~=true then return false,"isolation_"..field.."_unavailable:"..name end
             if p[field].value~=false then return false,"isolation_"..field..":"..name end
         end
     end
     if value(info.controller_valid)~=true then return false,"isolation_controller_unavailable"end
+    local ignored=not(info.gameplay==true and value(info.controller_native_owned)==true)
     for _,field in ipairs({"move_ignored","look_ignored"})do
         if not info[field]or info[field].known~=true then return false,"isolation_"..field.."_unavailable"end
-        if info[field].value~=true then return false,"isolation_"..field.."_readback"end
+        if info[field].value~=ignored then return false,"isolation_"..field.."_readback"end
     end
     return true
 end
 function M.inspect(env)
     local WG=env.WG
     local token=WG.token()
-    local info={census_complete=false,willies={}}
+    local info={census_complete=false,willies={},gameplay=env.gameplay==true}
     local function fresh()return WG.same(token)end
     local function object(fn)
         if not fresh()then return nil,"world changed"end
@@ -75,6 +78,7 @@ function M.inspect(env)
         local pawn,pawn_why=object(function()return pc:K2_GetPawn()end)
         info.controller_pawn=pawn and name(pawn)or unknown(pawn_why)
         info.controller_pawn_class=pawn and class(pawn)or unknown(pawn_why)
+        if env.gameplay then info.controller_native_owned=pawn and read(function()return type(env.owned)=="function"and env.owned(pawn)==true end,"boolean",pawn)or{known=true,value=false}end
         local target,target_why=object(function()return pc:GetViewTarget()end)
         info.view_target=target and name(target)or unknown(target_why)
         info.view_target_class=target and class(target)or unknown(target_why)
@@ -96,6 +100,7 @@ function M.inspect(env)
                 if not owner_address.known or not world_address.known then info.census_error="world identity unavailable";break end
                 if owner_address.value==world_address.value then
                     local row={name=name(pawn),class=class(pawn),persistent=read(function()return pawn:ActorHasTag(env.FName("Persistent"))end,"boolean",pawn),actor_hidden=read(function()return pawn.bHidden end,"boolean",pawn),actor_collision=read(function()return pawn:GetActorEnableCollision()end,"boolean",pawn)}
+                    if env.gameplay then row.native_owned=read(function()return type(env.owned)=="function"and env.owned(pawn)==true end,"boolean",pawn)end
                     if env.suppression then
                         row.retired=read(function()return env.suppression:retirement(pawn:GetAddress(),pawn:GetFName():ToString())end,"boolean",pawn)
                         row.complete_inert=read(function()return env.suppression:proof(pawn)end,"boolean",pawn)
@@ -114,8 +119,13 @@ function M.inspect(env)
     info.willie_count=#info.willies
     -- Retain the original policy. Never suppress or hide an actual fighter here.
     if pc and info.game_mode_class.known and info.game_mode_class.value=="/Script/Engine.GameModeBase"then
-        read(function()pc:SetIgnoreMoveInput(true);return true end,"boolean",pc)
-        read(function()pc:SetIgnoreLookInput(true);return true end,"boolean",pc)
+        if info.gameplay and info.controller_native_owned and info.controller_native_owned.known and info.controller_native_owned.value then
+            read(function()pc:ResetIgnoreMoveInput();return true end,"boolean",pc)
+            read(function()pc:ResetIgnoreLookInput();return true end,"boolean",pc)
+        else
+            read(function()pc:SetIgnoreMoveInput(true);return true end,"boolean",pc)
+            read(function()pc:SetIgnoreLookInput(true);return true end,"boolean",pc)
+        end
         info.move_ignored=read(function()return pc:IsMoveInputIgnored()end,"boolean",pc)
         info.look_ignored=read(function()return pc:IsLookInputIgnored()end,"boolean",pc)
     end

@@ -2022,6 +2022,7 @@ dependencies = [
  "ed25519-dalek",
  "hkdf",
  "hmac",
+ "lz4_flex",
  "rand 0.8.8",
  "sha2",
  "x25519-dalek",
@@ -2600,6 +2601,12 @@ dependencies = [
  "cc",
  "which",
 ]
+
+[[package]]
+name = "lz4_flex"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecbdfe44b1bd960b68170b417450a628c43f7cf56bb3c5317e61cb230ee7f226"
 
 [[package]]
 name = "malloc_buf"

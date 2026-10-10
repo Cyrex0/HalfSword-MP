@@ -95,7 +95,7 @@ function M.new(env)
                     state = state or { buttons = 0 }
                 end
                 if old and old.owner_peer ~= row.owner_peer then
-                    state.at, state.axes, state.want_buttons, state.mouse_pending = nil, nil, 0, false
+                    state.at, state.axes, state.want_buttons, state.mouse_pending, state.pending = nil, nil, 0, false, nil
                 end
                 self.states[id] = state
             end
@@ -111,6 +111,21 @@ function M.new(env)
             or not integer(frame.flags or 0, 0, 1) then return false end
         local state = self.states[key(frame)] or { buttons = 0 }
         if not newer(frame.delivery_seq, state.delivery_seq) then return false end
+        if env.ordered then
+            if not integer(frame.seq, 1, 0xffffffff) then return false end
+            local pending = state.pending or {}
+            -- Match the admitted server queue bound; never drop a press/release
+            -- edge by replacing it with the most recent held state.
+            if #pending >= 256 then return false end
+            local request = {epoch=frame.epoch,id=frame.id,incarnation=frame.incarnation,
+                seq=frame.seq,delivery_seq=frame.delivery_seq,buttons=frame.buttons,
+                flags=frame.flags or 0,axes={},at=env.now_ms()}
+            for i=1,8 do request.axes[i]=frame.axes[i] end
+            pending[#pending+1] = request
+            state.pending, state.delivery_seq = pending, frame.delivery_seq
+            self.states[key(frame)] = state
+            return true
+        end
         state.delivery_seq, state.at = frame.delivery_seq, env.now_ms()
         state.axes = {}; for i = 1, 8 do state.axes[i] = frame.axes[i] end
         state.want_buttons = frame.buttons
@@ -128,20 +143,49 @@ function M.new(env)
                 local binding = env.binding(row)
                 if not binding then
                     -- Do not touch a pawn retained from a previous possession.
-                    state.binding, state.buttons, state.axes, state.want_buttons = nil, 0, nil, 0
+                    state.binding, state.buttons, state.axes, state.want_buttons, state.pending = nil, 0, nil, 0, nil
                 else
                     if state.binding ~= binding.key then
                         state.binding, state.buttons = binding.key, 0
-                        state.axes, state.want_buttons, state.mouse_pending = nil, 0, false
+                        state.axes, state.want_buttons, state.mouse_pending, state.pending = nil, 0, false, nil
                         state.at = nil -- a new binding needs fresh input after identification
                     end
+                    local executed = false
+                    if env.ordered and state.pending then
+                        local pending = state.pending
+                        state.pending = nil -- callbacks must never replay an admitted edge
+                        for _, request in ipairs(pending) do
+                            now = env.now_ms() -- qualification/previous native callbacks may consume the receipt lifetime
+                            if now < request.at or now-request.at >= M.TIMEOUT_MS or (row.owner_peer or 0)<=0 then break end
+                            local axes = request.flags==1 and zero() or request.axes
+                            local wanted = request.flags==1 and 0 or request.buttons
+                            if not env.same(binding) then state.at,state.axes,state.want_buttons=nil,nil,0;break end
+                            now = env.now_ms()
+                            if now < request.at or now-request.at >= M.TIMEOUT_MS then break end
+                            local ok = env.invoke(binding,axes,state.buttons ~ wanted,wanted,request)
+                            if not ok or not env.same(binding) then
+                                -- Some native calls may already have executed. No retry
+                                -- or acknowledgement of an incomplete request is safe.
+                                state.at,state.axes,state.want_buttons=nil,nil,0
+                                break
+                            end
+                            state.buttons,state.want_buttons,state.at=wanted,wanted,request.at
+                            state.axes={table.unpack(axes)}
+                            state.axes[3],state.axes[4]=0,0
+                            state.mouse_pending=false
+                            executed=true
+                        end
+                    end
+                    now = env.now_ms()
                     local expired = not state.at or now - state.at >= M.TIMEOUT_MS or now < state.at
                         or (row.owner_peer or 0) <= 0
                     local axes = expired and zero() or state.axes or zero()
                     if expired then state.want_buttons, state.mouse_pending = 0, false end
                     if not state.mouse_pending then axes[3], axes[4] = 0, 0 end
                     local wanted = state.want_buttons or 0
-                    if env.same(binding) then
+                    -- A newly executed request already applied its axes this tick.
+                    -- Subsequent ticks repeat held axes without another edge/ACK.
+                    if (not executed or expired) and env.same(binding) then
                         local ok = env.invoke(binding, axes, state.buttons ~ wanted, wanted)
                         if ok and env.same(binding) then
                             state.buttons, state.mouse_pending = wanted, false

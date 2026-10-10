@@ -29,6 +29,7 @@ pub mod sample;
 pub mod servo;
 pub mod worker_input;
 pub mod native_host;
+pub mod native_gameplay;
 pub mod native_descriptor_binding;
 pub mod native_presentation;
 pub mod native_input_capture;

@@ -1,5 +1,29 @@
 # Native authority bootstrap checkpoint
 
+## Current priority: native gameplay API with compressed authority results
+
+The owner's compact action/RPC and lossless compression steering supersedes more
+full-mirror metadata optimization. The source retains complete initial recipes,
+then publishes exact native root/Health/Stamina and successful request counters
+without per-frame bone/component replay. The ordered request path preserves
+press/release, mouse consumption and original250ms timeout across callbacks;
+server-generated neutral releases never become client request acknowledgements.
+Incomplete native requests latch and stop compact sampling instead of retrying.
+Codec3/compact-server8/provider+effective3 focused Rust tests and control382 Lua
+assertions pass; client/passport focused313 and strict C++ object compile pass.
+Effective neutral/held controls are distinct from the successful request ACK;
+neutral releases clear Run/movement without fabricating request counters.
+native gameplay remains unverified until the committed/G0/deployed actual run.
+
+## Actual830a1e0f: still stale; no recursive guard path
+
+Normal021736-c902b3/fullG0/dev/all394/auth25816/c47092/20732: all16LIVEwarmstale,
+c2421–462/c1533–629ms/standardfalse/activeboth0. CleanupPASS4absent20savehashsame/
+nodumps/secondary. Layout insufficient. No check_guard recursion in mesh proof
+orRustcallback; highcounts areactualoutermetadata reads. Next boundedprimary
+proof of ONE callback-free preparation block before entry/exitbatching; EVERY
+original identity and callback/PE check retained. No purityguess/shortcut.
+
 ## f1556483 not deployed: resize fixture false positive blocks fullG0
 
 FullG0Lua74/75fail resize1 matchingbare2883 anywhereinlogs (randompaths);

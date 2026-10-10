@@ -16,6 +16,7 @@
 
 pub mod channel;
 pub mod conn;
+pub mod compression;
 pub mod crypto;
 pub mod endpoint;
 pub mod frag;

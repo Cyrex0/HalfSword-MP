@@ -317,8 +317,12 @@ function M.new(env)
             end
             local willies={};local targets={}
             for _,pawn in pairs(objects("Willie_BP_C"))do if current(pawn)and not protected(pawn)then
+                local owned=type(env.owned)=="function"and env.owned(pawn)==true
+                fresh()
+                if not owned then
                 if #willies>=64 then error("suppression_fighter_bound",0)end
                 willies[#willies+1]=pawn;targets[address(pawn)]=0
+                end
             end end
             local gear={};local seen={}
             for _,class in ipairs(GEAR)do for _,item in pairs(objects(class))do if current(item)then
