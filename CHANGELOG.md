@@ -22,6 +22,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   routines before possession, preserving complete passports and shared weapon
   bindings. Missing sheath-only creation remains unsupported; native verification
   is still in progress.
+- Retain the exact native state update offered to Lua through application, so a
+  newer tick in the same generation cannot replace it or renew its expiry.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

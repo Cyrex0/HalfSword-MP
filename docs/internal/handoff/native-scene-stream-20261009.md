@@ -2,6 +2,32 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actuala66662ed fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
+standardGameplay044025-3f1f8d passes native begin/construct/finish on both clients.
+Armor and held weapon restoration, full pre-possession gear checks, possession
+and post-possession gear checks advance; first client apply frame367/dir7 refuses
+`native gameplay result generation changed` with receipt54.452ms. No ready or
+active dispatch0/0; no combat/all-gear parity. Source reports native_ready until
+requested stop. Early qualified windows both secondary; actual Sky screenshots
+show loading overlays only. CleanupPASS/four absent/save20 unchanged/nodumps.
+Eight encoder samples2568 raw→1232 compressed envelope bytes/24us aggregate,
+excluding UDP/auth overhead; no client decode timing. Evidence native_operator_summary.
+Next narrow original-result lease/apply boundary investigation; don't loosen
+freshness/generation/roster guards to accept an unrelated scene.
+
+Exact failure path is scene() comparing Lua authority_tick with the latest
+ResultArc. Source remains dir7/inc5 through sampled366/frame367 wall3659521;
+client apply refuses wall3659560, while dir8/inc6 arrives only3659587 afterward.
+Candidate retains the exact successfully offered Scene Arc and original receipt,
+checks the requested tuple against that offer and current full same-generation
+roster/descriptors, and keeps250ms application expiry. Newer same-generation tick
+cannot replace or renew the offered data. Discard drops the offer. Core exports a
+scene before normal pawn cleanup; take_pawns clears applied proof and takes old
+handles while retaining that immutable offer. Focused native gameplay tests6 PASS,
+including original lease and actual scene→cleanup→begin boundary cases. Independent
+narrow acquisition and cleanup-order reviews CLOSED. FullG0/deploy and actual
+retry pending.
+
 Held-weapon candidate follows native startup5707/5874: exact captured class and
 all25 passport fields, actual typed-null hand, Dropped=false/DestroyPrevious=true.
 Existing logical actor aliases reuse one original actor rather than spawning

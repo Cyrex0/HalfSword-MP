@@ -107,10 +107,18 @@ struct Pawn {
 #[derive(Default)]
 pub(crate) struct State {
     pawns: HashMap<u32, Pawn>,
+    offered: Option<GameplayScene>,
     applied: Option<GameplayScene>,
 }
 impl State {
+    fn take_pawns(&mut self) -> HashMap<u32, Pawn> {
+        // Core exports the new scope's scene before clearing old native pawns.
+        // This authority DTO remains generation-qualified and keeps its original receipt.
+        self.applied = None;
+        std::mem::take(&mut self.pawns)
+    }
     pub(crate) fn discard(&mut self) {
+        self.offered = None;
         self.applied = None;
         if let Ok(p) = provider() {
             for (_, pawn) in self.pawns.drain() {
@@ -232,23 +240,57 @@ unsafe fn int(L: *mut lua_State, t: c_int, key: &str) -> Option<i64> {
         v
     }
 }
-unsafe fn scene(n: &Native, L: *mut lua_State) -> Result<GameplayScene, String> {
+fn offered_scene(
+    offered: Option<&GameplayScene>,
+    current: &GameplayScene,
+    requested: (u64, u32, u32),
+    application: bool,
+) -> Result<GameplayScene, String> {
+    let original = offered.ok_or("native gameplay result lease unavailable")?;
+    if requested
+        != (
+            original.directory.epoch,
+            original.directory.seq,
+            original.result.authority_tick,
+        )
+        || !same_generation(original, current)
+        || current.result.authority_tick < original.result.authority_tick
+        || current.received < original.received
+    {
+        return Err("native gameplay result generation changed".into());
+    }
+    if application && !original.fresh() {
+        return Err("native gameplay result is stale".into());
+    }
+    Ok(original.clone())
+}
+unsafe fn scene(n: &Native, L: *mut lua_State, application: bool) -> Result<GameplayScene, String> {
     unsafe {
-        let s = n
+        let current = n
             .native_host
             .client
             .as_ref()
             .ok_or("not a native gameplay client")?
             .gameplay_scene()
             .ok_or("no complete native gameplay result")?;
-        if !is_table(L, 1)
-            || int(L, 1, "epoch").map(|v| v as u64) != Some(s.directory.epoch)
-            || int(L, 1, "dir_seq") != Some(s.directory.seq as i64)
-            || int(L, 1, "authority_tick") != Some(s.result.authority_tick as i64)
-        {
+        let requested = is_table(L, 1)
+            .then(|| {
+                Some((
+                    int(L, 1, "epoch")? as u64,
+                    u32::try_from(int(L, 1, "dir_seq")?).ok()?,
+                    u32::try_from(int(L, 1, "authority_tick")?).ok()?,
+                ))
+            })
+            .flatten();
+        let Some(requested) = requested else {
             return Err("native gameplay result generation changed".into());
-        }
-        Ok(s)
+        };
+        offered_scene(
+            n.native_host.gameplay.offered.as_ref(),
+            &current,
+            requested,
+            application,
+        )
     }
 }
 unsafe fn json(L: *mut lua_State, v: &serde_json::Value) -> Result<(), String> {
@@ -462,6 +504,7 @@ impl Native {
     }
     pub unsafe fn native_gameplay_scene(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
+            self.native_host.gameplay.offered = None;
             let Some(s) = self
                 .native_host
                 .client
@@ -472,7 +515,11 @@ impl Native {
                 return 1;
             };
             match push_scene(L, &s, false) {
-                Ok(()) => 1,
+                Ok(()) => {
+                    // Retain exactly the result returned to Lua, including its network receipt.
+                    self.native_host.gameplay.offered = Some(s);
+                    1
+                }
                 Err(e) => nil_err(L, &e),
             }
         }
@@ -482,7 +529,7 @@ impl Native {
         unsafe {
             let top = lua_gettop(L);
             let result = (|| -> Result<(), String> {
-                let s = scene(self, L)?;
+                let s = scene(self, L, false)?;
                 let id = u32::try_from(arg_int(L, 4).ok_or("gameplay entity id")?)
                     .map_err(|_| "gameplay entity id")?;
                 if self.native_host.gameplay.pawns.contains_key(&id) {
@@ -672,10 +719,7 @@ impl Native {
         unsafe {
             let top = lua_gettop(L);
             let result = (|| -> Result<GameplayScene, String> {
-                let s = scene(self, L)?;
-                if !s.fresh() {
-                    return Err("native gameplay result is stale".into());
-                }
+                let s = scene(self, L, true)?;
                 if self.native_host.gameplay.pawns.len() != s.directory.entities.len() {
                     return Err("native gameplay pawn set incomplete".into());
                 }
@@ -926,8 +970,7 @@ impl Native {
                     return nil_err(L, &e);
                 }
             };
-            let pawns = std::mem::take(&mut self.native_host.gameplay.pawns);
-            self.native_host.gameplay.applied = None;
+            let pawns = self.native_host.gameplay.take_pawns();
             for (_, pawn) in pawns {
                 let vt = reflect::vt();
                 let context = vt.and_then(|vt| {
@@ -956,6 +999,212 @@ impl Native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
+
+    fn scene_fixture() -> GameplayScene {
+        let source =
+            serde_json::from_slice::<hsmp_server::native_descriptor::SourceRecipe>(include_bytes!(
+                "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+            ))
+            .unwrap();
+        let recipe = gp::Recipe {
+            schema: gp::RECIPE_SCHEMA,
+            actor_class: source.actor_class,
+            team: source.team,
+            passport: source.passport,
+            construction: source.construction,
+            equipment: gp::Equipment {
+                armor: source.equipment.armor,
+                weapons: source
+                    .equipment
+                    .weapons
+                    .into_iter()
+                    .map(|weapon| gp::Weapon {
+                        id: weapon.id,
+                        actor_class: weapon.actor_class,
+                        passport: weapon.passport,
+                    })
+                    .collect(),
+                hands: source.equipment.hands,
+                sheaths: source.equipment.sheaths,
+            },
+        };
+        recipe.validate().unwrap();
+        let epoch = (1u64 << 63) + 7;
+        let entities = (0..2)
+            .map(|slot| w::Entity {
+                reference: w::EntityRef {
+                    epoch,
+                    id: slot as u32 + 1,
+                    incarnation: 5,
+                },
+                owner_peer: 9001 + slot as u32,
+                slot,
+                kind: w::HUMAN,
+                controller: 0,
+                team: Some(recipe.team),
+            })
+            .collect::<Vec<_>>();
+        let result = gp::ResultFrame {
+            epoch,
+            directory_seq: 7,
+            authority_tick: 367,
+            entities: entities
+                .iter()
+                .map(|entity| gp::State {
+                    reference: entity.reference,
+                    request_seq: 1,
+                    delivery_seq: 1,
+                    buttons: 1,
+                    axes: [1., 0., 0., 0., 0., 0., 0., 0.],
+                    position: [1.0000000000000002, 20., 30.],
+                    rotation: [0., 90., 0.],
+                    velocity: [1., 2., 3.],
+                    health: gp::NativeScalar::F32(100f32.to_bits()),
+                    stamina: gp::NativeScalar::F64(99f64.to_bits()),
+                })
+                .collect(),
+        };
+        result.validate().unwrap();
+        GameplayScene {
+            descriptors: entities
+                .iter()
+                .map(|entity| {
+                    Arc::new(gp::Bootstrap {
+                        reference: entity.reference,
+                        slot: entity.slot,
+                        directory_seq: 7,
+                        revision: 1,
+                        source_frame_seq: 1,
+                        recipe: recipe.clone(),
+                    })
+                })
+                .collect(),
+            directory: w::Directory {
+                epoch,
+                seq: 7,
+                state: w::READY,
+                arena: "Native test".into(),
+                error: String::new(),
+                entities,
+            },
+            result: Arc::new(result),
+            peer_id: 9001,
+            received: Instant::now()
+                .checked_sub(Duration::from_millis(50))
+                .unwrap(),
+        }
+    }
+    fn request(scene: &GameplayScene) -> (u64, u32, u32) {
+        (
+            scene.directory.epoch as i64 as u64,
+            scene.directory.seq,
+            scene.result.authority_tick,
+        )
+    }
+    fn newer(scene: &GameplayScene) -> GameplayScene {
+        let mut next = scene.clone();
+        let mut result = (*next.result).clone();
+        result.authority_tick += 1;
+        result.entities[0].position[0] = 200.;
+        next.result = Arc::new(result);
+        next.received = Instant::now();
+        next
+    }
+    #[test]
+    fn offered_result_survives_newer_tick_without_replacing_arc_or_receipt() {
+        let original = scene_fixture();
+        let next = newer(&original);
+        let acquired = offered_scene(Some(&original), &next, request(&original), true).unwrap();
+        assert!(Arc::ptr_eq(&acquired.result, &original.result));
+        assert!(!Arc::ptr_eq(&acquired.result, &next.result));
+        assert_eq!(acquired.received, original.received);
+        assert_eq!(acquired.result.authority_tick, 367);
+        assert_eq!(
+            acquired.result.entities[0].position[0].to_bits(),
+            1.0000000000000002f64.to_bits()
+        );
+        assert!(acquired
+            .descriptors
+            .iter()
+            .zip(&original.descriptors)
+            .all(|(a, b)| Arc::ptr_eq(a, b)));
+    }
+    #[test]
+    fn new_scope_cleanup_preserves_exported_result_before_first_begin() {
+        let original = scene_fixture();
+        let next = newer(&original);
+        let mut state = State {
+            offered: Some(original.clone()),
+            applied: Some(original.clone()),
+            ..Default::default()
+        };
+        assert!(state.take_pawns().is_empty());
+        assert!(state.applied.is_none());
+        let acquired =
+            offered_scene(state.offered.as_ref(), &next, request(&original), false).unwrap();
+        assert!(Arc::ptr_eq(&acquired.result, &original.result));
+        assert_eq!(acquired.received, original.received);
+        state.discard();
+        assert!(state.offered.is_none());
+    }
+    #[test]
+    fn newer_result_does_not_renew_expired_offered_receipt() {
+        let mut original = scene_fixture();
+        original.received = Instant::now()
+            .checked_sub(Duration::from_millis(300))
+            .unwrap();
+        let next = newer(&original);
+        assert!(next.fresh());
+        assert_eq!(
+            offered_scene(Some(&original), &next, request(&original), true)
+                .err()
+                .as_deref(),
+            Some("native gameplay result is stale")
+        );
+        // Cold bootstrap remains generation-bound rather than input-age-bound.
+        let cold = offered_scene(Some(&original), &next, request(&original), false).unwrap();
+        assert_eq!(cold.received, original.received);
+        assert!(!cold.fresh());
+    }
+    #[test]
+    fn offered_result_refuses_forged_tuple_replaced_lease_or_true_generation_change() {
+        let original = scene_fixture();
+        let next = newer(&original);
+        assert!(offered_scene(None, &next, request(&original), true).is_err());
+        for key in [
+            (original.directory.epoch ^ 1, 7, 367),
+            (original.directory.epoch, 8, 367),
+            request(&next),
+        ] {
+            assert!(offered_scene(Some(&original), &next, key, true).is_err());
+        }
+        assert!(offered_scene(Some(&next), &next, request(&original), true).is_err());
+        let mut changed = next.clone();
+        changed.directory.seq += 1;
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = next.clone();
+        changed.directory.entities[1].reference.incarnation += 1;
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = next.clone();
+        changed.descriptors[1] = Arc::new((*changed.descriptors[1]).clone());
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = next.clone();
+        Arc::make_mut(&mut changed.descriptors[1]).revision += 1;
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = next.clone();
+        changed.peer_id += 1;
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = original.clone();
+        Arc::make_mut(&mut changed.result).authority_tick -= 1;
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+        changed = next;
+        changed.received = original
+            .received
+            .checked_sub(Duration::from_millis(1))
+            .unwrap();
+        assert!(offered_scene(Some(&original), &changed, request(&original), true).is_err());
+    }
     #[test]
     fn private_provider_layout() {
         assert_eq!(std::mem::size_of::<Value>(), 16);
