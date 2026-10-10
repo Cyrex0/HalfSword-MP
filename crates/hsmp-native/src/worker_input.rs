@@ -323,7 +323,7 @@ impl Native {
                     .copy_from_slice(&(axes[index] as f32).to_le_bytes());
                 (vt.call)(pawn, function_object, params.0.as_mut_ptr() as *mut c_void);
                 if !self.sample.world_ok || !admitted() {
-                    return nil_err(L, "possession after axis");
+                    return nil_err(L, "possession");
                 }
             }
             for (index, functions) in button_functions.into_iter().enumerate() {
@@ -344,7 +344,7 @@ impl Native {
                 params.0[..function.size].fill(0);
                 (vt.call)(pawn, function_object, params.0.as_mut_ptr() as *mut c_void);
                 if !self.sample.world_ok || !admitted() {
-                    return nil_err(L, "possession after action");
+                    return nil_err(L, "possession");
                 }
             }
             if let Some(reference) = reference {

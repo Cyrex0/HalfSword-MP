@@ -2,6 +2,12 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+First full G0 of3fd71545 blocked events (six undeclared client diagnostic fields)
+and the existing input fixture's exact `possession` spelling. Declare the explicit
+client/codec fields and retain the established reason with all fresh guards and
+incomplete latches unchanged. Focused native_worker_input_g1 then passes; no
+fixture, tolerance, native acceptance or deployment bypass was changed.
+
 The owner's API/RPC and compression steering supersedes further mirror metadata
 micro-optimizations. Implement capability-gated actions to the native authority,
 exact compact authoritative root/Health/Stamina results, and real client Willie
