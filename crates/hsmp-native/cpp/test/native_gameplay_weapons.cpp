@@ -6,6 +6,7 @@
 #include <limits>
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation*){}
 extern "C" void hsmp_native_set_gameplay(const HsmpGameplay*){}
+extern "C" void hsmp_native_set_puppet_publish(HsmpPuppetPublish){}
 extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){}
 extern "C" void hsmp_native_profile_tick(uint32_t){}
 extern "C" int32_t hsmp_native_capture_profile_active(){return 0;}

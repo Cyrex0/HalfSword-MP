@@ -1990,6 +1990,41 @@ impl Native {
                         let ack = self.sample.input.execution(reference);
                         let (buttons, axes) = self.sample.input.effective(reference, pawn as usize, controller_address)
                             .ok_or("gameplay effective input unavailable")?;
+                        // The full physical pose clients display. A pawn whose bodies
+                        // cannot be read this tick still publishes its root and stats.
+                        let mut body = Vec::new();
+                        let nobody = self.sample.cfg.as_ref().map(|config| config.nobody.clone()).unwrap_or_default();
+                        if nobody.iter().enumerate().take(NBONES).all(|(bone, no_body)| self.sample_bone(vt, mesh, bone, *no_body)) {
+                            let mut weapon_count = 0;
+                            for (field, hands) in [("w1", "h1"), ("w2", "h2")] {
+                                let weapon = pointer(field);
+                                if weapon.is_null() {
+                                    continue;
+                                }
+                                if let Some(values) = self.sample_weapon(vt, mesh, weapon, number(actor, hands).unwrap_or(0.0), 0.0) {
+                                    self.sample.weapons[weapon_count] = values;
+                                    weapon_count += 1;
+                                }
+                            }
+                            let control = self.sample_control(vt, pawn);
+                            let bones = *self.sample.bones;
+                            let weapons = self.sample.weapons;
+                            let control_values = self.sample.control;
+                            if encoder::encode_pose_with_context(
+                                &PoseArgs { tick: frame as f64, ts, dt, b: &bones, w: &weapons[..weapon_count], c: control.then_some(&control_values) },
+                                &mut scratch,
+                                &mut pose,
+                                &[],
+                                None,
+                                Some(context),
+                            ) && pose.used().len() <= hsmp_server::native_gameplay_wire::MAX_POSE_BYTES
+                            {
+                                body = pose.used().to_vec();
+                            }
+                        }
+                        if !self.native_guard_ok(vt) {
+                            return Err("gameplay pose sample changed".into());
+                        }
                         compact_rows.push(State {
                             reference,
                             request_seq: ack.seq,
@@ -2003,6 +2038,7 @@ impl Native {
                             cache_rotation,
                             health: values[0],
                             stamina: values[1],
+                            pose: body,
                         });
                         compact_guards.push(
                             self.sample

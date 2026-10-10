@@ -1855,6 +1855,7 @@ pub(crate) mod tests {
                     cache_rotation: [0.; 3],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
+                    pose: Vec::new(),
                 })
                 .collect(),
         };
@@ -2161,6 +2162,7 @@ pub(crate) mod tests {
                         cache_rotation: [-0., 90.00000000000001, 1.0000000000000002],
                         health: gp::NativeScalar::F32(100.125f32.to_bits()),
                         stamina: gp::NativeScalar::F64(70.12345678901234f64.to_bits()),
+                        pose: Vec::new(),
                     })
                     .collect(),
             };

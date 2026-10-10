@@ -232,17 +232,20 @@ pub(crate) struct State {
     pawns: HashMap<u32, Pawn>,
     offered: Option<GameplayScene>,
     applied: Option<GameplayScene>,
+    pub(crate) puppets: crate::puppet::Puppets,
 }
 impl State {
     fn take_pawns(&mut self) -> HashMap<u32, Pawn> {
         // Core exports the new scope's scene before clearing old native pawns.
         // This authority DTO remains generation-qualified and keeps its original receipt.
+        self.puppets.forget();
         self.applied = None;
         std::mem::take(&mut self.pawns)
     }
     pub(crate) fn discard(&mut self) {
         self.offered = None;
         self.applied = None;
+        self.puppets.forget();
         if let Ok(p) = provider() {
             for (_, pawn) in self.pawns.drain() {
                 unsafe { (p.discard)(pawn.handle) }
@@ -611,6 +614,15 @@ fn native_state(state: &gp::State) -> NativeState {
     }
 }
 unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Result<(), String> {
+    unsafe { push_scene_with(L, s, proved, true) }
+}
+/// `recipes=false` omits the bootstrap recipes: the per-frame view after bootstrap.
+unsafe fn push_scene_with(
+    L: *mut lua_State,
+    s: &GameplayScene,
+    proved: bool,
+    recipes: bool,
+) -> Result<(), String> {
     unsafe {
         lua_createtable(L, 0, 13);
         let out = lua_gettop(L);
@@ -692,11 +704,13 @@ unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Resu
                 set_num(L, t, "value", value.value());
                 rawset_str(L, r, name);
             }
-            json(
-                L,
-                &serde_json::to_value(&d.recipe).map_err(|_| "gameplay bootstrap encoding")?,
-            )?;
-            rawset_str(L, r, "recipe");
+            if recipes {
+                json(
+                    L,
+                    &serde_json::to_value(&d.recipe).map_err(|_| "gameplay bootstrap encoding")?,
+                )?;
+                rawset_str(L, r, "recipe");
+            }
             lua_rawseti(L, rows, i as i64 + 1);
         }
         rawset_str(L, out, "entities");
@@ -778,7 +792,9 @@ impl Native {
                 lua_pushnil(L);
                 return 1;
             };
-            match push_scene(L, &s, false) {
+            let recipes =
+                !(lua_gettop(L) > 0 && lua_type(L, 1) == LUA_TBOOLEAN && lua_toboolean(L, 1) != 0);
+            match push_scene_with(L, &s, false, recipes) {
                 Ok(()) => {
                     // Retain exactly the result returned to Lua, including its network receipt.
                     self.native_host.gameplay.offered = Some(s);
@@ -1274,6 +1290,99 @@ impl Native {
                     lua_pushboolean(L, 1);
                     match push_scene(L, &s, true) {
                         Ok(()) => 2,
+                        Err(e) => {
+                            lua_settop(L, top);
+                            nil_err(L, &e)
+                        }
+                    }
+                }
+                Err(e) => {
+                    lua_settop(L, top);
+                    nil_err(L, &e)
+                }
+            }
+        }
+    }
+    /// puppet(scene) -> true, scene | nil, err. Per frame after bootstrap: every finished
+    /// pawn shows the authority's played-back pose. Errors starting with
+    /// "native gameplay puppet lost" mean that fighter must be rebuilt.
+    pub unsafe fn native_gameplay_puppet(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            let top = lua_gettop(L);
+            let result = (|| -> Result<GameplayScene, String> {
+                let s = scene(self, L, false)?;
+                let vt = reflect::vt().ok_or("gameplay reflection unavailable")?;
+                if self.native_host.gameplay.pawns.len() != s.directory.entities.len() {
+                    return Err("native gameplay pawn set incomplete".into());
+                }
+                let now = std::time::Instant::now();
+                let state = &mut self.native_host.gameplay;
+                for row in &s.result.entities {
+                    let pawn = state
+                        .pawns
+                        .get(&row.reference.id)
+                        .ok_or("gameplay original pawn missing")?;
+                    if !pawn.finished
+                        || pawn.descriptor.reference != row.reference
+                        || !same_generation(&pawn.scene, &s)
+                    {
+                        return Err("gameplay pawn generation changed".into());
+                    }
+                    let id = row.reference.id;
+                    if !state.puppets.bound(id) {
+                        let original = reflect::get(vt, pawn.original_pawn.weak);
+                        if original.is_null() || original as u64 != pawn.original_pawn.address {
+                            return Err("native gameplay puppet lost: pawn".into());
+                        }
+                        let controller = if pawn.own {
+                            let pc = reflect::get(vt, pawn.controller.weak);
+                            if pc.is_null() || pc as u64 != pawn.controller.address {
+                                return Err("native gameplay puppet lost: controller".into());
+                            }
+                            Some(pc)
+                        } else {
+                            None
+                        };
+                        state
+                            .puppets
+                            .bind(vt, id, original, controller)
+                            .map_err(|e| {
+                                state.puppets.forget_one(id);
+                                format!("native gameplay puppet bind: {e}")
+                            })?;
+                    }
+                    let feed = crate::puppet::Feed {
+                        tick: s.result.authority_tick,
+                        received: s.received,
+                        pose: &row.pose,
+                        position: row.position,
+                        velocity: row.velocity,
+                        yaw: row.rotation[1],
+                        health: row.health.value(),
+                        stamina: row.stamina.value(),
+                    };
+                    if let Err(e) = state.puppets.apply(vt, id, &feed, now) {
+                        state.puppets.forget_one(id);
+                        return Err(format!("native gameplay puppet lost: {e}"));
+                    }
+                }
+                // Readiness receipts keep the server LIVE and admit this client's input.
+                if s.fresh() {
+                    if let Some(client) = self.native_host.client.as_ref() {
+                        let _ = client.gameplay_applied(&s);
+                    }
+                }
+                Ok(s)
+            })();
+            match result {
+                Ok(s) => {
+                    lua_pushboolean(L, 1);
+                    match push_scene_with(L, &s, true, false) {
+                        Ok(()) => {
+                            let shown = self.native_host.gameplay.puppets.fewest_shown();
+                            set_int(L, lua_gettop(L), "puppet_frames", shown as i64);
+                            2
+                        }
                         Err(e) => {
                             lua_settop(L, top);
                             nil_err(L, &e)
@@ -1855,6 +1964,7 @@ mod tests {
                     velocity: [1., 2., 3.],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
+                    pose: Vec::new(),
                 })
                 .collect(),
         };

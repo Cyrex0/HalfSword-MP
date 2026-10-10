@@ -6,6 +6,7 @@
 #include <psapi.h>
 #include "native_presentation.h"
 #include "native_gameplay.h"
+#include "native_puppet.h"
 #include "hsmp_native.h"
 #include <algorithm>
 #include <array>
@@ -1602,6 +1603,7 @@ void gameplay_weapons_prepare(uint64_t,HsmpViewResult*);
 void gameplay_weapons_reset();
 #include "native_gameplay_pawn_impl.h"
 #include "native_gameplay_weapons_impl.h"
+#include "native_puppet_impl.h"
 const HsmpPresentation provider{12,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets,capture_frame};
 }
 void hsmp_presentation_set_create_log(HsmpPresentationCreateLog logger){create_logger.store(logger);}
@@ -1631,6 +1633,6 @@ void hsmp_presentation_register(const HsmpReflect* reflection) {
     spline_api.variant_name=reinterpret_cast<SplineVariantName>(module?GetProcAddress(module,"?GetFName@FFieldClassVariant@Unreal@RC@@QEBA?AVFName@23@XZ"):nullptr);
     vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
     layouts_verified=false;layout_objects.clear();spline_layout_verified=false;spline_layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
-    gameplay_boundary_invalidate();gameplay_weapons_reset();gameplay_pawns.clear();gameplay_layouts_verified=false;hsmp_native_set_gameplay(vt?&gameplay_provider:nullptr);
+    gameplay_boundary_invalidate();gameplay_weapons_reset();gameplay_pawns.clear();gameplay_layouts_verified=false;hsmp_native_set_gameplay(vt?&gameplay_provider:nullptr);hsmp_native_set_puppet_publish(vt?puppet_publish:nullptr);
     hsmp_native_set_source_path_reader(vt&&source_outer&&source_package_name&&object_name&&retirement_flags?source_path_reader:nullptr);
 }

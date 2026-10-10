@@ -115,6 +115,15 @@ pub fn encode_pose_with_geometry(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut Po
     encode_pose_with_context(a,s,out,boxes,strikers,None)
 }
 
+/// Degrees into (-180, 180]; non-finite values pass through for the codec to refuse.
+fn wrap_degrees(d: f64) -> f64 {
+    if !d.is_finite() {
+        return d;
+    }
+    let w = d.rem_euclid(360.0);
+    if w > 180.0 { w - 360.0 } else { w }
+}
+
 pub fn encode_pose_with_context(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf, boxes: &[Vec<v2::WeaponBox>], strikers: Option<&[v2::BodyStriker]>, context: Option<v2::Context>) -> bool {
     if context.is_some_and(|c| !c.valid()) {return false;}
     s.b.clear();
@@ -135,8 +144,9 @@ pub fn encode_pose_with_context(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut Pos
         grip_l: (c[2] as u32).min(255) as u8,
         scalars: std::array::from_fn(|i| c[3 + i] as f32),
         aim: [c[19] as f32, c[20] as f32, c[21] as f32],
-        ctrl_pitch: c[22] as f32,
-        ctrl_yaw: c[23] as f32,
+        // The codec carries signed degrees; UE control rotations may read 0..360.
+        ctrl_pitch: wrap_degrees(c[22]) as f32,
+        ctrl_yaw: wrap_degrees(c[23]) as f32,
         ik: std::array::from_fn(|i| [c[24 + i * 3] as f32, c[25 + i * 3] as f32, c[26 + i * 3] as f32]),
         ik_world: [false; 4],
     });
@@ -165,6 +175,15 @@ pub fn encode_pose_with_context(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut Pos
 mod tests {
     use super::*;
     use hsmp_ipc::record::{view, VarBuf};
+
+    #[test]
+    fn control_degrees_wrap_to_signed_range() {
+        assert_eq!(wrap_degrees(300.0), -60.0);
+        assert_eq!(wrap_degrees(-200.0), 160.0);
+        assert_eq!(wrap_degrees(180.0), 180.0);
+        assert_eq!(wrap_degrees(45.0), 45.0);
+        assert!(wrap_degrees(f64::NAN).is_nan());
+    }
 
     /// A frozen copy of the pre-ABI-2 path: HSMPNative wrote the Lua numbers into a
     /// `LocalPose` slot (f32 fields, u32 hands / class / grips) and the sidecar's

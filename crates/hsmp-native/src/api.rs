@@ -250,6 +250,7 @@ entry! {
     l_native_gameplay_finish => Guard::GameThread, |n,L| n.native_gameplay_finish(L);
     l_native_gameplay_apply => Guard::GameThread, |n,L| n.native_gameplay_apply(L);
     l_native_gameplay_confirm => Guard::GameThread, |n,L| n.native_gameplay_confirm(L);
+    l_native_gameplay_puppet => Guard::GameThread, |n,L| n.native_gameplay_puppet(L);
     l_native_gameplay_weapons => Guard::GameThread, |n,L| n.native_gameplay_weapons(L);
     l_native_gameplay_clear => Guard::GameThread, |n,L| n.native_gameplay_clear(L);
     l_native_inspect_component => Guard::GameThread, |n,L| n.native_inspect_component(L);
@@ -354,6 +355,7 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_gameplay_finish", l_native_gameplay_finish),
     ("native_gameplay_apply", l_native_gameplay_apply),
     ("native_gameplay_confirm", l_native_gameplay_confirm),
+    ("native_gameplay_puppet", l_native_gameplay_puppet),
     ("native_gameplay_weapons", l_native_gameplay_weapons),
     ("native_gameplay_clear", l_native_gameplay_clear),
     ("native_inspect_component", l_native_inspect_component),

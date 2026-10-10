@@ -521,7 +521,7 @@ function M.start()
             entity_bindings[reference] = binding_key
             local actor = { epoch=row.epoch, id=row.id, incarnation=row.incarnation, pawn=address, mesh=mesh:GetAddress(),
                 controller=binding.pc_address,controller_index=row.controller,pawn_name=name,dism=0 }
-            if not gameplay then
+            do
                 local seen, count = {}, 0
                 local two_handed = pawn["R Two Handed Grip"] == true
                 for _, hand in ipairs({ "R", "L" }) do
@@ -546,9 +546,9 @@ function M.start()
         local now_ms = os.clock()*1000
         local before = os.clock()*1000
         if gameplay then
-            -- The compact sampler publishes exact native root/stat values after
-            -- checking the complete original roster. Recipes are bootstrap data;
-            -- neither full component poses nor RenderWorld replay enters this path.
+            -- The compact sampler publishes native root/stat values and each
+            -- fighter's full physical pose (bodies + held weapons) for clients
+            -- to display. Recipes are bootstrap data.
             source_phase({epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq},"gameplay_sample","enter")
             local ok, why = sampler({epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,
                 ts_ms=now_ms,dt_ms=0,actors=actors})

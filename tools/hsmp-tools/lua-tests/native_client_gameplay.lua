@@ -3,24 +3,17 @@ local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
-    local f={world="w1",calls={},actions={},progress={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0,clock=0,timings={}}
+    local f={world="w1",calls={},progress={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,puppets=0,clock=0,diagnostics={}}
     local cls={GetAddress=function()return 100 end,GetFName=function()return 101 end}
     local function pawn(id)
-        local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
-        for _,name in ipairs({"InpAxisEvt_Move Forward / Backward_K2Node_InputAxisEvent_14","InpAxisEvt_Move Right / Left_K2Node_InputAxisEvent_19",
-            "InpActEvt_Run_K2Node_InputActionEvent_4","InpActEvt_Run_K2Node_InputActionEvent_5"})do
-            p[name]=setmetatable({type=function()return"UFunction"end,IsValid=function()return true end,
-                GetFullName=function()return"Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..name end},
-                {__call=function(_,self,value)check(self==p,"accepted native action targets exact original pawn");f.actions[#f.actions+1]={id=id,name=name,value=value};f.clock=f.clock+2 end})
-        end
-        return p
+        return{GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
     end
     f.pawns={pawn(1),pawn(2)}
     local function recipe(id)return{schema=1,actor_class="/Game/Character/Blueprints/Willie_BP.Willie_BP_C",team=id,
         passport={fixture_id=id},construction={},equipment={}}end
     f.scene={epoch=-7,dir_seq=8,generation="g8",peer_id=9,state=1,fresh=true,frame_seq=40,authority_tick=40,received_age_ms=4,
-        entities={{epoch=-7,id=1,incarnation=2,revision=3,owner_peer=9,kind=0,recipe=recipe(1),buttons=1,axes={0.25,-0.5,0,0,0,0,0,0}},
-            {epoch=-7,id=2,incarnation=4,revision=5,owner_peer=10,kind=0,recipe=recipe(2),buttons=0,axes={0,0,0,0,0,0,0,0}}}}
+        entities={{epoch=-7,id=1,incarnation=2,revision=3,owner_peer=9,kind=0,recipe=recipe(1)},
+            {epoch=-7,id=2,incarnation=4,revision=5,owner_peer=10,kind=0,recipe=recipe(2)}}}
     local N={}
     N.native_gameplay_begin=function(scene,world,pc,id)
         check(scene==f.scene and world==88 and pc==77,"begin uses exact current scene/world/controller")
@@ -28,20 +21,12 @@ local function fixture()
     end
     N.native_gameplay_current=function(handle,scalar)
         if f.expired then return nil,"original native weak expired"end
-        if scalar==true then
-            if f.probe_detail then f.clock=f.clock+3 end
-            f.scalar_guards=f.scalar_guards+1
-            if f.scalar_error then return nil,f.scalar_error end
-            if f.scalar_result~=nil then return f.scalar_result end
-            return true
-        end
-        if f.probe_detail then f.clock=f.clock+5 end
-        f.wrappers=f.wrappers+1;return f.pawns[handle]
+        if scalar==true then return true end
+        return f.pawns[handle]
     end
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
     N.native_gameplay_initialized=function(handle)
-        f.setup_queries=(f.setup_queries or 0)+1;f.calls[#f.calls+1]="initialized"..handle
-        if f.expired then return nil,"original native weak expired"end
+        f.calls[#f.calls+1]="initialized"..handle
         if f.setup_error then return nil,f.setup_error end
         if f.setup_hook then f.setup_hook(handle)end
         if f.setup_count~=nil then return f.setup_count end
@@ -52,357 +37,149 @@ local function fixture()
         if f.finish_result~=nil then return f.finish_result,f.finish_reason end
         return true
     end
-    N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";f.clock=f.clock+20;return true,f.applied_scene or scene end
-    N.native_gameplay_weapons=function(scene)
-        f.batch_count=(f.batch_count or 0)+1
-        if f.batch_error then return nil,f.batch_error end
-        local batch={epoch=scene.epoch,dir_seq=scene.dir_seq,authority_tick=scene.authority_tick,entities={}}
-        for index,row in ipairs(scene.entities)do batch.entities[index]={id=row.id,incarnation=row.incarnation,aliases={0,0,0,0,0,0,0},weapons={}}end
-        if f.mutate_batch then f.mutate_batch(batch)end
-        return batch
-    end
-    N.native_gameplay_confirm=function(scene)
-        f.confirm_started=f.clock
-        f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";f.clock=f.clock+30;if f.confirm_error then return nil,f.confirm_error end;return true,scene
+    N.native_gameplay_puppet=function(scene)
+        f.puppets=f.puppets+1;f.calls[#f.calls+1]="puppet";f.clock=f.clock+250
+        if f.puppet_error then return nil,f.puppet_error end
+        return true,{generation=scene.generation,gameplay_proof=true,fresh=scene.fresh,received_age_ms=6,authority_tick=scene.authority_tick,entities=scene.entities,puppet_frames=f.shown or 5}
     end
     N.native_gameplay_clear=function(forget)f.clears=f.clears+1;if forget then f.forgot=f.forgot+1 end;return true end
     f.native=N
     local Passport={before_finish=function(recipe,env)
-        check(env.guard()==true and env.current()==f.pawns[recipe.passport.fixture_id],"passport writes only fresh original deferred pawn")
+        check(env.guard()==true and env.current()==f.pawns[recipe.passport.fixture_id],"passport writes only the fresh original deferred pawn")
         f.calls[#f.calls+1]="passport"..recipe.passport.fixture_id;return true
-    end,restore_live_armor=function(recipe,env)
-        check(env.guard()==true,"live armor restoration remains original-pawn guarded")
+    end,restore_live_armor=function(recipe)
         f.armor=f.armor+1;f.calls[#f.calls+1]="armor"..recipe.passport.fixture_id
         if f.armor_error then return nil,f.armor_error end;return true
-    end,restore_live_weapons=function(recipe,env)
-        check(env.guard()==true,"live weapon restoration remains original-pawn guarded")
+    end,restore_live_weapons=function(recipe)
         f.weapons=f.weapons+1;f.calls[#f.calls+1]="weapons"..recipe.passport.fixture_id
         if f.weapon_error then return nil,f.weapon_error end;return true
     end,verify_equipment=function(recipe,env)
-        f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
-        if f.apply_count>0 then check(env.weapon_snapshot and env.weapon_snapshot.id==recipe.passport.fixture_id,
-            "application consumes copied weapon row belonging to original pawn")end
-        if f.probe_detail then
-            check(env.current()==f.pawns[recipe.passport.fixture_id],"timed current preserves actual original pawn output")
-            local actor=f.pawns[recipe.passport.fixture_id]["Weapon R"]
-            check(env.weapon_guard(actor,"Weapon R",1)==true,"timed weapon guard preserves original field qualification")
-        end
-        if f.exhaust_clock and env.now_us then for _=1,32770 do env.now_us()end end
-        f.clock=f.clock+100
+        f.equipment=f.equipment+1;check(env.guard()==true,"gear check runs against the guarded original pawn")
         f.calls[#f.calls+1]="gear"..recipe.passport.fixture_id
         if f.gear_error then return nil,f.gear_error end;return true
     end}
     f.game=Gameplay.new({native=N,passport=Passport,same=function(token)return token==f.world end,
-        now_us=function()
-            if f.clock_error then error("diagnostic clock unavailable")end
-            if f.clock_rollback and f.apply_count>f.clock_rollback then return 0 end
-            return f.clock
-        end,
-        diagnostic=function(row)
-            check(f.calls[#f.calls]=="confirm"or not row.ok,"timing emitted only after native proof or original refusal")
-            f.timings[#f.timings+1]=row;if f.log_error then error("diagnostic sink refused")end
-        end,
+        now_us=function()return f.clock end,
+        diagnostic=function(row)f.diagnostics[#f.diagnostics+1]=row end,
         world=function()return{GetAddress=function()return 88 end},f.world,{GetAddress=function()return 77 end}end,
-        world_address=function()return 88 end,progress=function(stage,done,total)
-            if done~=nil or total~=nil then f.progress_counts=true end
-            f.progress[#f.progress+1]=stage
-        end,fname=function(name)return name end})
+        progress=function(stage)f.progress[#f.progress+1]=stage end,fname=function(name)return name end})
     function f:bootstrap()
         for _=1,16 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
-    end
-    function f:detail()
-        self.probe_detail=true
-        for _,p in ipairs(self.pawns)do p["Weapon R"]={GetAddress=function()return 500 end,GetFName=function()return 501 end,
-            GetClass=function()return cls end,IsValid=function()return true end,HasAnyFlags=function()return false end,
-            GetWorld=function()f.clock=f.clock+7;return{GetAddress=function()return 88 end}end}end
+        check(self.game:bootstrapped(),"sixteen yielded stages build both original pawns")
     end
     return f
-end
-local function setup_fixture()
-    local f=fixture()
-    for _=1,3 do local ok,why=f.game:apply(f.scene);check(ok==nil and why==Gameplay.PENDING,"native setup follows original staged construction")end
-    check(f.game.rows[1].stage=="native_setup"and f.setup_queries==nil,"construction enters native setup without claiming completion")
-    return f
-end
-do
-    local f=setup_fixture();f.setup_count=2
-    for _=1,2 do
-        local ok,why=f.game:apply(f.scene)
-        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="native_setup"and
-            f.armor==0 and f.weapons==0 and f.equipment==0 and f.apply_count==0 and f.confirmed==0 and #f.actions==0 and
-            not f.game:view_ready(f.scene),"positive native action count remains pending before every gear/possession/apply/readiness path")
-    end
-    check(f.progress[#f.progress]=="native_setup"and f.setup_queries==2,"pending native initialization visibly reports the actual setup stage and is freshly queried")
-    f.setup_count=0;local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="equipment"and f.armor==0 and f.weapons==0,
-        "exact zero count advances only the next yielded equipment stage")
-    f.game:apply(f.scene)
-    check(f.armor==1 and f.weapons==1 and f.equipment==0 and f.game.rows[1].stage=="post_setup"and f.apply_count==0 and f.confirmed==0,
-        "authority gear restoration runs once then yields pending before fresh post-restoration setup proof")
-end
-do
-    local f=setup_fixture();f.setup_error="original pending action query refused"
-    local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.setup_error and f.armor==0 and f.confirmed==0 and not f.game.ready,
-        "native initialization nil refusal preserves the original error and blocks gear/readiness")
-end
-for _,count in ipairs({-1,1.0,false,{},math.huge})do
-    local f=setup_fixture();f.setup_count=count;local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay pending action count unavailable"and f.armor==0 and f.game.rows[1].stage=="native_setup",
-        "only exact nonnegative integer native action counts admit the setup query")
-end
-do
-    local f=setup_fixture();f.expired=true;local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="original native weak expired"and f.armor==0 and f.confirmed==0,
-        "pending initialization retains the native original-pawn qualification refusal")
-end
-do
-    local f=setup_fixture();f.native.native_gameplay_initialized=nil;local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay API unavailable: native_gameplay_initialized"and f.armor==0,
-        "missing initialization API cannot fall back to immediate equipment setup")
-end
-do
-    local f=setup_fixture();f.setup_hook=function()f.world="w2"end
-    local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay world changed"and f.armor==0 and f.game.rows[1].stage=="native_setup",
-        "world drop inside the initialized query refuses before advancing the original pawn")
-    f.game:drop();check(f.forgot==1 and #f.game.rows==0 and not f.game.ready,"world drop forgets pending original native handles without getter reuse")
-end
-do
-    local f=setup_fixture();f.setup_count=1;f.game:apply(f.scene);f.scene.generation="g9";f.game:sync(f.scene)
-    check(f.clears==1 and f.game.key==nil and #f.game.rows==0 and f.armor==0,
-        "generation replacement closes pending original native setup before a new binding can be adopted")
-end
-local function post_setup_fixture()
-    local f=setup_fixture();f.game:apply(f.scene);f.game:apply(f.scene)
-    check(f.game.rows[1].stage=="post_setup"and f.armor==1 and f.weapons==1 and f.equipment==0,
-        "restored authority gear enters a separate fresh native setup wait")
-    return f
-end
-do
-    local f=post_setup_fixture();f.setup_count=3;local original=f.game.rows[1].handle
-    for _=1,2 do
-        local ok,why=f.game:apply(f.scene)
-        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
-            f.armor==1 and f.weapons==1 and f.equipment==0 and f.confirmed==0 and f.apply_count==0 and #f.actions==0,
-            "new native actions after restoration wait without repeating gear, adopting another pawn, or finishing")
-    end
-    f.setup_count=0;local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==Gameplay.PENDING and f.equipment==1 and f.game.rows[1].stage=="possess"and
-        f.calls[#f.calls]=="gear1"and f.armor==1 and f.weapons==1,
-        "fresh post-setup zero proves all equipment before yielding the separate finish iteration")
-    f.finish_result=false;f.finish_reason="native gameplay initialization remains pending"
-    ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
-        f.armor==1 and f.weapons==1 and f.equipment==1 and f.confirmed==0 and f.apply_count==0 and not f.game.ready,
-        "typed pre-mutation native finish pending returns to original post-setup verification without restoration or readiness")
-    f.setup_count=2
-    for _=1,2 do
-        ok,why=f.game:apply(f.scene)
-        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.game.rows[1].handle==original and
-            f.armor==1 and f.weapons==1 and f.equipment==1 and f.confirmed==0 and f.apply_count==0 and not f.game.ready,
-            "queued native work after late finish pending waits without rereading unsettled gear or restoring it again")
-    end
-    f.setup_count=0;f.game:apply(f.scene)
-    check(f.game.rows[1].stage=="possess"and f.equipment==2 and f.calls[#f.calls]=="gear1"and f.armor==1 and f.weapons==1,
-        "every finish retry is preceded by fresh complete gear proof after the original native setup reaches zero")
-    f.finish_result=nil;f.game:apply(f.scene);f.game:apply(f.scene)
-    check(f.game.cursor==2 and f.equipment==3 and f.armor==1 and f.weapons==1 and f.calls[#f.calls]=="gear1",
-        "later native finish success still requires complete post-possession gear readback")
-end
-do
-    local f=post_setup_fixture();f.gear_error="original post-setup weapon changed";local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.gear_error and f.game.rows[1].stage=="post_setup"and f.calls[#f.calls]=="gear1"and f.confirmed==0,
-        "changed gear after native setup refuses before possession instead of rebaseline or restoration")
-end
-for _,reply in ipairs({{false,"other native finish refusal"},{true,"native gameplay initialization remains pending"}})do
-    local f=post_setup_fixture();f.game:apply(f.scene);f.finish_result,f.finish_reason=reply[1],reply[2]
-    local ok,why=f.game:apply(f.scene)
-    if reply[1]==false then
-        check(ok==nil and why==reply[2]and f.game.rows[1].stage=="possess","unrelated false native finish remains fatal")
-    else
-        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_equipment","true native finish preserves success semantics even with a diagnostic second value")
-    end
-end
-do
-    local f=post_setup_fixture();f.game:apply(f.scene)
-    f.native.native_gameplay_finish=function()return nil,"native gameplay initialization remains pending"end
-    local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay initialization remains pending"and f.game.rows[1].stage=="possess"and not f.game.ready,
-        "nil native finish with pending text remains a failure rather than typed pending")
-    f.native.native_gameplay_finish=function()return nil,"native gameplay initialization became pending after finish mutation"end
-    ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay initialization became pending after finish mutation"and f.armor==1 and f.weapons==1,
-        "native pending after mutation remains fatal with its distinct original reason")
-end
-do
-    local f=fixture();f:bootstrap();f:detail();f.scene.state=2;f.scene.gameplay_proof=true
-    local ok=f.game:apply(f.scene);local trace=f.timings[1];local row=trace.rows[1]
-    check(ok==true and row.guard_n==1 and row.guard_us==3 and row.current_n==3 and row.current_us==15 and
-        row.weapon_guard_n==1 and row.weapon_guard_us==24 and row.us==132,
-        "inclusive guard/current/weapon attribution encloses only original calls and full gear still executes")
-    check(trace.timing_inclusive==true and trace.clock_overhead_subtracted==false and trace.gear_clock_reads==20 and
-        trace.clock_reads==31 and row.clock_reads==10,"QPC calls including the weapon phase edge and conservative display anchor are counted separately and nested observer costs are never subtracted")
-    f.scalar_error="precise original current refusal";local result,reason=f.game:apply(f.scene)
-    check(result==nil and reason==f.scalar_error and f.timings[2].stage=="gear"and f.confirmed==1,
-        "timed guard preserves exact original throw and blocks later confirmation")
-end
-do
-    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.exhaust_clock=true
-    local ok=f.game:apply(f.scene);local row=f.timings[1]
-    check(ok==true and f.confirmed==1 and row.gear_clock_reads==32768 and row.gear_clock_limit==32768 and row.rows[1].timing_incomplete,
-        "detail clock exhaustion labels partial timing and leaves full gameplay proof and reporting intact")
-end
-do
-    local f=fixture();f:bootstrap();check(#f.timings==0,"yielded construction work does not consume complete-frame timing budget")
-    f.scene.state=2;f.scene.gameplay_proof=true;f.applied_scene={}
-    for key,value in pairs(f.scene)do f.applied_scene[key]=value end;f.applied_scene.received_age_ms=17
-    local ok,actual,sampled_at=f.game:apply(f.scene);local row=f.timings[1]
-    check(ok==true and actual==f.applied_scene and row.epoch==-7 and row.frame_seq==40 and row.authority_tick==40,
-        "timing preserves original signed epoch and integer result provenance")
-    check(sampled_at==f.confirm_started/1000000 and sampled_at<f.clock/1000000 and actual.display_sampled_at==nil,
-        "display carries a separate pre-confirmation same-clock anchor without changing the native scene or renewing its receipt")
-    check(row.received_age_entry_ms==4 and row.applied_received_age_ms==17 and row.applied_authority_tick==40 and
-        row.elapsed_apply_return_to_confirm_us==200,"timing separates exact native returned original receipt age from elapsed gear time")
-    check(row.native_apply_us==20 and row.weapon_batch_us==0 and row.gear_us==200 and row.confirm_us==30 and row.movement_us==12 and row.total_us==262 and
-        row.rows[1].id==1 and row.rows[1].incarnation==2 and row.rows[1].us==100 and row.rows[2].id==2 and row.rows[2].us==100,
-        "timing attributes every full original gear row and native stage without changing proof execution")
-    for _=1,11 do f.game:apply(f.scene)end
-    check(#f.timings==8,"successful complete-frame timing has a fixed first-eight emission bound")
-    f.confirm_error="native gameplay result is stale";local success,reason=f.game:apply(f.scene)
-    check(success==nil and reason==f.confirm_error and #f.timings==9 and f.timings[9].stage=="confirm" and not f.timings[9].ok and
-        f.timings[9].applied_received_age_ms==17,"first later refusal records its failing edge while preserving original stale reason and receipt")
-    f.game:apply(f.scene);check(#f.timings==9,"later refusal retries cannot exceed the timing budget")
-end
-do
-    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.batch_error="native gameplay result is stale"
-    local ok,why=f.game:apply(f.scene);local row=f.timings[1]
-    check(ok==nil and why==f.batch_error and row.source_state==1 and row.stage=="weapon_batch"and not row.ok and f.confirmed==0,
-        "READY weapon refusal is measured before LIVE without changing readiness, original refusal or confirmation")
-    check(row.native_apply_us==20 and row.weapon_batch_us==0 and row.gear_us==nil and row.received_age_entry_ms==4 and row.rows[1]==nil,
-        "READY refusal retains original receipt and prior phase cost without inventing gear completion")
-    f.batch_error=nil;f.scene.state=2;for _=1,12 do f.game:apply(f.scene)end
-    check(#f.timings==8 and f.timings[8].source_state==2,
-        "READY and LIVE attempts share the same bounded first-eight diagnostic budget")
-end
-do
-    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.gear_error="original gear changed"
-    local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.gear_error and f.timings[1].stage=="gear" and f.timings[1].rows[1].us==100 and f.confirmed==0,
-        "failed gear row timing remains copied and prevents premature confirmation")
-    f.gear_error=nil;for _=1,8 do f.game:apply(f.scene)end
-    f.confirm_error="native gameplay result is stale";f.game:apply(f.scene)
-    check(#f.timings==9 and not f.timings[1].ok and not f.timings[9].ok and f.timings[9].stage=="confirm",
-        "early sampled failure cannot consume the independent first later failure report")
-end
-do
-    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.clock_rollback=f.apply_count
-    local ok=f.game:apply(f.scene)
-    check(ok==true and f.confirmed==1 and#f.timings==0,"clock rollback disables diagnostics while every native proof still executes")
-end
-for _,fault in ipairs({"clock_error","log_error"})do
-    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f[fault]=true
-    local ok,actual=f.game:apply(f.scene)
-    check(ok==true and actual==f.scene and f.confirmed==1,"optional diagnostic failure never changes native readiness or original result")
-end
-for _,state in ipairs({1,2})do
-    local f=fixture();f:bootstrap();f.scene.state=state;f.scene.gameplay_proof=true
-    check(f.game:apply(f.scene)==true,"original fresh gameplay result establishes view proof")
-    local actions,applies,confirms,armor,weapons=#f.actions,f.apply_count,f.confirmed,f.armor,f.weapons
-    local original=f.scene;original.fresh=false
-    local ok,why=f.game:apply(original)
-    check(ok==nil and why=="native gameplay result is stale"and not f.game:view_ready(original)and#f.actions==actions and f.apply_count==applies and f.confirmed==confirms,
-        "completed stale READY/LIVE result clears view proof before movement, native application or confirmation")
-    f.scene={};for key,value in pairs(original)do f.scene[key]=value end
-    f.scene.fresh=true;f.scene.frame_seq=41;f.scene.authority_tick=41
-    local applied,actual=f.game:apply(f.scene)
-    check(applied==true and actual==f.scene and f.game:view_ready(actual)and f.armor==armor and f.weapons==weapons and original.fresh==false and original.frame_seq==40,
-        "new fresh gameplay result reuses prepared pawns and all full gear checks without renewing the old result")
-    f.confirm_error="native gameplay result is stale";ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.confirm_error and not f.game:view_ready(f.scene),"expiry after full gear/native apply removes the previous positive view proof")
 end
 do
     local f=fixture();f:bootstrap()
-    check(table.concat(f.progress,",")=="present,character,present,native_setup,equipment,native_setup,controls,check_equipment,present,character,present,native_setup,equipment,native_setup,controls,check_equipment",
-        "each yielded native preparation step reports its actual work stage")
-    check(table.concat(f.calls,",")=="begin1,passport1,construct1,initialized1,armor1,weapons1,initialized1,gear1,possess1,gear1,begin2,passport2,construct2,initialized2,armor2,weapons2,initialized2,gear2,possess2,gear2","native construction/completed initialization/live armor/weapons/post-setup proof/possession order including post-possession proof")
-    check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
-    check(f.scalar_guards>0 and f.wrappers>0,"discarded guards use explicit scalar admission while actual getters retain full wrappers")
-    f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
-    check(f.progress[#f.progress]=="sync","finished preparation waits for current authoritative state without claiming readiness")
-    check(not f.progress_counts,"gameplay preparation and synchronization never invent an overall completion count")
-    check(ok==true and actual==f.scene and f.confirmed==1 and f.game:view_ready(actual),"complete raw state proof follows whole-roster Lua gear callbacks before readiness")
-    check(table.concat(f.calls,","):match("apply,gear1,gear2,confirm$"),"confirmation runs after both final gear checks")
-    check(#f.actions==6 and f.actions[1].value==0.25 and f.actions[2].value==-0.5 and f.actions[3].value.KeyName=="None","exact accepted movement and source default FKey Run replay before reconciliation")
-    f.game:apply(f.scene);check(#f.actions==10 and f.armor==2 and f.weapons==2,"held Run never repeats press and gear restoration runs once per constructed pawn")
-    local axes,buttons=Gameplay.intent(actual,actual.entities[1]);check(axes[1]==1 and axes[2]==0 and buttons==1,"first acceptance intent is only Move+Run")
-    actual.fresh=false;check(Gameplay.intent(actual,actual.entities[1])==nil,"stale result cannot drive even bounded test intent")
-    f.game:drop();check(f.forgot==1 and #f.game.rows==0,"world drop is scalar forget only")
+    check(table.concat(f.calls,",")=="begin1,passport1,construct1,initialized1,armor1,weapons1,initialized1,gear1,possess1,gear1,"..
+        "begin2,passport2,construct2,initialized2,armor2,weapons2,initialized2,gear2,possess2,gear2",
+        "bootstrap order: construction, settled setup, gear restoration, settled setup + gear check, possession, gear check")
+    check(f.puppets==0 and not f.game:view_ready(f.scene),"bootstrap never shows a puppet or claims view readiness")
+    check(table.concat(f.progress,","):find("present,character,present,native_setup,equipment,native_setup,controls,check_equipment",1,true)==1,
+        "loading progress names each actual bootstrap stage")
+    local ok,actual,sampled=f.game:apply(f.scene)
+    check(ok==true and actual.gameplay_proof==true and f.puppets==1 and f.game:view_ready(actual),"after bootstrap one puppet call per frame establishes view readiness")
+    check(type(sampled)=="number"and f.progress[#f.progress]=="sync","frame returns a display sample time and reports sync")
+    for _=1,10 do f.game:apply(f.scene)end
+    check(f.puppets==11 and f.equipment==4 and f.armor==2 and f.weapons==2,"frames repeat neither gear restoration nor gear checks")
+    local frames=0;for _,row in ipairs(f.diagnostics)do if row.kind=="frame"then frames=frames+1 end end
+    check(frames==8 and f.diagnostics[1].us==250,"frame timing diagnostics are bounded to the first eight frames")
+    f.scene.fresh=false;ok=f.game:apply(f.scene)
+    check(ok==true and f.puppets==12,"a stale authority frame still plays back the buffered pose")
 end
 do
-    local f=fixture();f.game:apply(f.scene);f.scalar_error="gameplay stage: original native weak expired"
+    local f=fixture()
+    for _=1,3 do f.game:apply(f.scene)end
+    f.setup_count=2
+    for _=1,3 do f.game:apply(f.scene);f.clock=f.clock+1000000 end
+    check(f.game.rows[1].stage=="native_setup"and f.armor==0,"pending native setup waits while under the settle bound")
+    f.clock=f.clock+1000000;f.game:apply(f.scene)
+    check(f.game.rows[1].stage=="equipment","pending native latent work past the settle bound advances the stage")
+    f.setup_count=0;f.game:apply(f.scene)
+    check(f.armor==1 and f.weapons==1 and f.game.rows[1].stage=="post_setup","gear restoration runs once after setup")
+end
+do
+    local f=fixture();for _=1,6 do f.game:apply(f.scene)end
+    check(f.game.rows[1].stage=="possess","settled post setup checks gear then reaches possession")
+    f.finish_result=false;f.finish_reason="native gameplay initialization remains pending"
     local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.scalar_error and f.wrappers==0 and #f.calls==1 and f.confirmed==0,
-        "scalar admission refusal preserves exact reason and prevents wrapper construction or stage advancement")
+    check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="post_setup"and f.armor==1,"typed finish pending returns to post setup without restoring gear")
+    f.finish_result,f.finish_reason=false,"other native finish refusal";f.game:apply(f.scene)
+    ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="other native finish refusal"and not f.game.ready,"any other finish refusal is fatal")
 end
-for _,value in ipairs({false,{},1})do
-    local f=fixture();f.game:apply(f.scene);f.scalar_result=value
+do
+    local f=fixture();f.gear_error="native live weapon passport differs";f:bootstrap()
+    check(#f.game.gear_warnings==4 and f.game.gear_warnings[1].reason==f.gear_error and f.diagnostics[1].kind=="gear",
+        "gear mismatch on a display-only puppet is reported, never fatal")
+    check(f.game:apply(f.scene)==true,"reported gear mismatch still reaches the puppet frame path")
+end
+do
+    local f=fixture();f:bootstrap();f.game:apply(f.scene)
+    f.puppet_error="native gameplay puppet lost: puppet mesh lost"
     local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why=="native gameplay original pawn guard unavailable" and f.wrappers==0 and #f.calls==1,
-        "only exact boolean true admits scalar pawn guard")
+    check(ok==nil and why==Gameplay.PENDING and f.clears==1 and not f.game:bootstrapped()and not f.game.ready,"a lost puppet clears the originals for a rebuild")
+    check(f.diagnostics[#f.diagnostics].kind=="rebuild"and f.game.rebuilds==1,"rebuilds are counted and reported")
+    for _=1,2 do f.puppet_error=nil;f:bootstrap();f.puppet_error="native gameplay puppet lost: pawn";f.game:apply(f.scene)end
+    f.puppet_error=nil;f:bootstrap();f.puppet_error="native gameplay puppet lost: pawn"
+    ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay puppet lost: pawn"and f.game.rebuilds==4,"repeated puppet loss past the rebuild bound is fatal")
 end
 do
-    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.gear_error="original armor changed in later callback"
-    local ok,why=f.game:apply(f.scene);check(ok==nil and why==f.gear_error and f.confirmed==0,"late native gear mutation refuses before input acknowledgment")
+    local f=fixture();f:bootstrap();f.puppet_error="puppet pose shipping profile unsupported"
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.puppet_error,"non-loss puppet refusal is fatal with its reason")
+    check(not f.game.ready and f.clears==0,"fatal puppet refusal keeps the originals for the controller to stop")
 end
 do
-    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.confirm_error="native gameplay final root changed"
-    local ok,why=f.game:apply(f.scene);check(ok==nil and why==f.confirm_error and not f.game:view_ready(f.scene),"last native raw census refusal never fabricates readiness")
+    local f=fixture();f:bootstrap();f.game:apply(f.scene)
+    local next={generation="g9",epoch=-7,dir_seq=9,entities={}}
+    local ok,why=f.game:apply(next)
+    check(ok==nil and why==Gameplay.PENDING and f.clears==1 and f.game.key==nil,"a new generation after bootstrap clears and rebuilds from the next full scene")
 end
 do
     local f=fixture();for _=1,4 do f.game:apply(f.scene)end
     f.armor_error="original construction armor restore refused"
     local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.armor_error and f.equipment==0 and f.confirmed==0,
-        "construction armor restoration failure prevents verification, possession and readiness")
+    check(ok==nil and why==f.armor_error and f.equipment==0 and f.puppets==0,"gear restoration failure is fatal before possession")
 end
 do
-    local f=fixture();for _=1,4 do f.game:apply(f.scene)end
-    f.weapon_error="native exact weapon binding unsupported"
+    local f=fixture();for _=1,3 do f.game:apply(f.scene)end
+    f.setup_hook=function()f.world="w2"end
     local ok,why=f.game:apply(f.scene)
-    check(ok==nil and why==f.weapon_error and f.armor==1 and f.weapons==1 and f.equipment==0 and f.confirmed==0,
-        "native weapon restoration failure prevents verification, possession and readiness")
+    check(ok==nil and why=="native gameplay world changed"and f.game.rows[1].stage=="native_setup","a world change inside a native call refuses")
+    f.game:drop();check(f.forgot==1 and #f.game.rows==0 and not f.game.ready,"world drop forgets native handles")
+end
+for _,mutation in ipairs({function(r)r.schema=6 end,function(r)r.components={}end,function(r)r.equipment=nil end})do
+    local f=fixture();mutation(f.scene.entities[1].recipe)
+    local ok=f.game:apply(f.scene)
+    check(ok==nil and #f.calls==0,"wrong or incomplete bootstrap recipe refuses before native spawn")
 end
 do
-    local f=fixture();f.game:apply(f.scene);check(f.game:owned(f.pawns[1]),"suppression exemption requires a freshly requalified owned native pawn")
+    local f=fixture();f.game:apply(f.scene);check(f.game:owned(f.pawns[1]),"suppression exemption recognises an owned original pawn")
     local foreign={GetAddress=function()return 2000 end,GetFName=function()return 1 end,GetClass=function()return{GetAddress=function()return 100 end}end,HasAnyFlags=function()return false end}
-    check(not f.game:owned(foreign),"foreign same-name pawn cannot acquire ownership exemption")
-    f.expired=true;check(not pcall(f.game.owned,f.game,f.pawns[1]),"expired original native weak refuses rather than rebinds")
+    check(not f.game:owned(foreign),"a foreign pawn gets no ownership exemption")
 end
 do
     local f=fixture();f.game:apply(f.scene);f.scene.generation="g9";f.game:sync(f.scene)
-    check(f.clears==1 and f.game.key==nil,"recipe generation change clears original native handles before suppression")
+    check(f.clears==1 and f.game.key==nil,"recipe generation change clears original native handles")
 end
 do
     local closes=0;local core=Core.new({gameplay=true,now=function()return 0 end,clear=function()error("owned cleanup refused")end,close=function()closes=closes+1 end,report=function()end})
     core:stop("original failure");core:stop("repeat");check(closes==1 and core.stopped,"cleanup failure still closes endpoint once after stop latches")
 end
-for _,mutation in ipairs({function(r)r.schema=6 end,function(r)r.components={}end,function(r)r.equipment=nil end})do
-    local f=fixture();mutation(f.scene.entities[1].recipe)
-    local ok=f.game:apply(f.scene)
-    check(ok==nil and #f.calls==0,"wrong/full-render/incomplete bootstrap refuses before native spawn")
-end
-for _,mutate in ipairs({function(b)b.epoch=4 end,function(b)b.authority_tick=b.authority_tick+1 end,
-    function(b)b.entities[2].id=1 end,function(b)b.entities[1].incarnation=7 end,
-    function(b)b.entities[3]=b.entities[1]end,function(b)b.entities.extra=true end})do
-    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.mutate_batch=mutate
-    local gear=f.equipment;local ok,reason=f.game:apply(f.scene)
-    check(ok==nil and reason:find("native gameplay weapon",1,true)and f.equipment==gear and f.confirmed==0,
-        "malformed or foreign copied weapon roster refuses before gear verification or acknowledgment")
+do
+    local f=fixture();f:bootstrap();f.puppet_error="native gameplay puppet lost: pawn";f.game:apply(f.scene)
+    f.puppet_error=nil;f:bootstrap()
+    for _=1,600 do f.game:apply(f.scene)end
+    check(f.game.rebuilds==0,"a long run of good frames forgives earlier puppet losses")
 end
 do
-    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.batch_error="original weapon receipt is stale"
-    local ok,reason=f.game:apply(f.scene)
-    check(ok==nil and reason==f.batch_error and f.confirmed==0,"copied weapon admission preserves original refusal without fallback")
+    local f=fixture();f.shown=0;f:bootstrap()
+    for _=1,120 do f.game:apply(f.scene)end
+    local stalled=false;for _,row in ipairs(f.diagnostics)do if row.kind=="stall"then stalled=true end end
+    check(stalled,"frames that never publish an authority pose are reported as a stall")
+    f.shown=nil;local g=fixture();g:bootstrap();for _=1,120 do g.game:apply(g.scene)end
+    for _,row in ipairs(g.diagnostics)do check(row.kind~="stall","published poses never report a stall")end
 end
-check(n>50,"focused staged gameplay coverage")
+check(n>30,"focused staged gameplay coverage")

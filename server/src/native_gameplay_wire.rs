@@ -8,8 +8,10 @@ pub const CAP_NATIVE_GAMEPLAY: u64 = 1 << 28;
 pub const CAP_NATIVE_COMPRESSION: u64 = 1 << 29;
 pub const CAP_NATIVE_GAMEPLAY_QUATERNION: u64 = 1 << 30;
 pub const CAP_NATIVE_GAMEPLAY_CACHE: u64 = 1 << 31;
-pub const RESULT_VERSION: u8 = 3;
-pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 216;
+pub const RESULT_VERSION: u8 = 4;
+/// Largest codec-v2 body pose carried per entity (two weapons, control block, no boxes).
+pub const MAX_POSE_BYTES: usize = 768;
+pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * (216 + 2 + MAX_POSE_BYTES);
 pub fn gameplay_capable(caps: u64) -> bool {
     let required = CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION | CAP_NATIVE_GAMEPLAY_CACHE;
     caps & required == required
@@ -209,6 +211,8 @@ pub struct State {
     pub cache_rotation: [f64; 3],
     pub health: NativeScalar,
     pub stamina: NativeScalar,
+    /// The authority's full physical pose (hsmp_pose codec v2), empty when unsampled.
+    pub pose: Vec<u8>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResultFrame {
@@ -259,6 +263,9 @@ impl ResultFrame {
             }
             e.health.validate()?;
             e.stamina.validate()?;
+            if e.pose.len() > MAX_POSE_BYTES {
+                return Err("gameplay result pose capacity");
+            }
         }
         Ok(())
     }
@@ -342,6 +349,8 @@ pub fn encode_result(v: &ResultFrame) -> Result<Vec<u8>, &'static str> {
         }
         scalar(&mut out, e.health);
         scalar(&mut out, e.stamina);
+        out.put_u16(e.pose.len() as u16);
+        out.extend_from_slice(&e.pose);
     }
     Ok(out)
 }
@@ -404,6 +413,15 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
             cache_rotation,
             health: read_scalar(&mut r)?,
             stamina: read_scalar(&mut r)?,
+            pose: {
+                let len = read!(u16) as usize;
+                if len > MAX_POSE_BYTES {
+                    return Err("gameplay result pose capacity");
+                }
+                r.bytes(len)
+                    .map_err(|_| "truncated gameplay result")?
+                    .to_vec()
+            },
         });
     }
     if !r.is_empty() {
@@ -566,8 +584,19 @@ mod tests {
                 cache_rotation: [-0., 90.00000000000001, 1.0000000000000002],
                 health: NativeScalar::F32(99.125f32.to_bits()),
                 stamina: NativeScalar::F64(77.12345678901234f64.to_bits()),
+                pose: vec![0xff, 0xff, 0xff, 2, 9, 8, 7],
             }],
         }
+    }
+    #[test]
+    fn pose_bytes_round_trip_and_capacity() {
+        let mut v = frame();
+        v.entities[0].pose.clear();
+        assert_eq!(decode_result(&encode_result(&v).unwrap()).unwrap(), v);
+        v.entities[0].pose = vec![7; MAX_POSE_BYTES];
+        assert_eq!(decode_result(&encode_result(&v).unwrap()).unwrap(), v);
+        v.entities[0].pose.push(7);
+        assert!(encode_result(&v).is_err());
     }
     #[test]
     fn exact_typed_state_and_truncation() {

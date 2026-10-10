@@ -28,7 +28,7 @@ function M.start(opts)
     local log=function(format,...)print(string.format("[HSMPNativeClient] "..format.."\n",...))end
     IPC.init({mod="HSMPMatch",state_dir=state_dir,log=log});IPC.frame()
     local N=IPC.N
-    if not N or not N.client_start or (gameplay_mode and(not Gameplay or not Passport or not N.native_gameplay_apply)or not gameplay_mode and not N.native_present)then log("startup refused: native client API unavailable");return end
+    if not N or not N.client_start or (gameplay_mode and(not Gameplay or not Passport or not N.native_gameplay_puppet)or not gameplay_mode and not N.native_present)then log("startup refused: native client API unavailable");return end
     local HL=module("hsmp_log");if HL then HL.init({mod="HSMPMatch",state_dir=state_dir})end
     SG.install({mod="HSMPMatch",state_dir=state_dir,log=HL,fresh_per_session=false,reload_gi_on_exit=false});SG.set_active(true)
     local WG=HW.new({log=log,UEHelpers=UEH})
@@ -69,12 +69,11 @@ function M.start(opts)
         progress=function(stage,done,total)loading:set(stage,done,total)end})or nil
     if gameplay_mode then
         local gameplay_native={}
-        for _,api in ipairs({"native_gameplay_begin","native_gameplay_construct","native_gameplay_initialized","native_gameplay_finish","native_gameplay_apply"})do
+        for _,api in ipairs({"native_gameplay_begin","native_gameplay_construct","native_gameplay_initialized","native_gameplay_finish"})do
             gameplay_native[api]=function(...)return traced(api,N[api],...)end
         end
         gameplay_native.native_gameplay_current=N.native_gameplay_current;gameplay_native.native_gameplay_clear=N.native_gameplay_clear
-        gameplay_native.native_gameplay_confirm=N.native_gameplay_confirm
-        gameplay_native.native_gameplay_weapons=N.native_gameplay_weapons
+        gameplay_native.native_gameplay_puppet=N.native_gameplay_puppet
         gameplay=Gameplay.new({native=gameplay_native,passport=Passport,same=WG.same,find=StaticFindObject,
             now_us=N.now_us,diagnostic=function(row)if HL then HL.event("x_native_gameplay_timing",row)end end,
             fname=function(value)return FName(value,FNAME_Add)end,
@@ -95,7 +94,7 @@ function M.start(opts)
     end
     local function isolated()
         local token=WG.token();local world=WG.world();if not world or not WG.same(token)then return false,"isolation_world_unavailable"end
-        if gameplay then gameplay:sync(N.native_gameplay_scene())end
+        if gameplay then gameplay:sync(N.native_gameplay_scene(gameplay:bootstrapped()))end
         if isolation_token and WG.same(isolation_token)and now()<(isolation_at or 0)then return true end
         local stopped,stop_reason,summary=suppress:run()
         if not stopped and stop_reason and not stop_reason:match("^suppression_game_mode_mismatch:")then
@@ -122,7 +121,7 @@ function M.start(opts)
     end
     controller=Core.new({gameplay=gameplay_mode,now=now,link=N.native_client_status,directory=N.host_directory,scene=function()
         local scene
-        if gameplay_mode then scene=N.native_gameplay_scene()else scene=N.native_scene()end
+        if gameplay_mode then scene=N.native_gameplay_scene(gameplay:bootstrapped())else scene=N.native_scene()end
         phase_context=nil
         if scene then for _,own in ipairs(scene.entities or{})do if own.kind==0 and own.owner_peer==scene.peer_id then
             phase_context={generation=scene.generation,epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,own_entity=own.id,own_incarnation=own.incarnation};break
@@ -146,7 +145,7 @@ function M.start(opts)
         confirmed=function(scene,own,state,sampled_at)if hud then hud:status(state,scene,own,true,sampled_at)end end,
         close=function()N.host_stop()end,send=N.native_input,
         input=function(scene,own)
-            if brain then if gameplay_mode then return Gameplay.intent(scene,own)end;return Input.ai(scene,own,now())end
+            if brain then if gameplay_mode and type(own.rotation)=="table"then own.look_yaw=own.rotation[2]end;return Input.ai(scene,own,now())end
             if not mapping then
                 local settings=StaticFindObject("/Script/Engine.Default__InputSettings")
                 if not settings or not settings:IsValid()then return nil,"native input settings unavailable"end

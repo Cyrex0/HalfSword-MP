@@ -7,6 +7,7 @@
 static const HsmpPresentation* installed{};
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {installed=p;}
 extern "C" void hsmp_native_set_gameplay(const HsmpGameplay*) {}
+extern "C" void hsmp_native_set_puppet_publish(HsmpPuppetPublish){}
 // Production profile tracing is Rust-owned and inactive for this engine fixture.
 int profile_ffi_calls{};
 extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){++profile_ffi_calls;}

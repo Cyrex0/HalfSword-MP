@@ -151,6 +151,9 @@ struct GameplayPawn {
     GameplayCurrentObservation current_binding;
     std::optional<GameplayApplied> applied;
     std::optional<GameplayHud> ui;
+    // First finish that still saw native latent work. Blueprint polling delays can re-arm
+    // forever; after a bounded wait finish proceeds (the client pawn is display-only).
+    std::optional<std::chrono::steady_clock::time_point> pending_since;
     std::optional<GameplayInitialization> initialization;
 };
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
@@ -954,7 +957,9 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
     gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
-        const auto count=[&]{return gameplay_initialization_count(entry);};
+        const bool forced=entry.pending_since&&std::chrono::steady_clock::now()-*entry.pending_since>std::chrono::seconds(3);
+        const auto count=[&]{const auto pending=gameplay_initialization_count(entry);
+            if(pending&&!entry.pending_since)entry.pending_since=std::chrono::steady_clock::now();return forced?uint32_t{0}:pending;};
         const auto close=[&]{lookup_finish();gameplay_pure(entry);if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);};
         if(!gameplay_finish_initialization(entry.stage,result,count,close,[&]{
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
@@ -962,17 +967,15 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         else require(!object_property(entry.pawn,L"Controller").weak,"native gameplay remote pawn unexpectedly possessed");
         Function disable(L"/Script/Engine.Actor:DisableInput");disable.object(L"PlayerController",entry.controller);disable.call(entry.pawn,result);
         // Remove the actor's native input stack, so local keys cannot execute
-        // unacknowledged damage. Accepted movement is replayed explicitly.
+        // damage; the pawn only displays the authority's pose.
         if(entry.own){Function move(L"/Script/Engine.Controller:ResetIgnoreMoveInput");move.call(entry.controller,result);
             Function look(L"/Script/Engine.Controller:ResetIgnoreLookInput");look.call(entry.controller,result);}
         entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);
-        // Discover immutable gear metadata during generation-bound preparation.
-        // Every application still captures and verifies its own fresh values.
         // Native PlayerController possession reenables bStartWithTickEnabled.
         // Close that lifecycle step after possession/HUD, then read back false.
         gameplay_stop_tick(entry.pawn,result);
         }))return 0;
-        gameplay_weapons_prepare(handle,result);lookup_finish();gameplay_pure(entry);
+        lookup_finish();gameplay_pure(entry);
         if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
     }catch(const std::exception& error){gameplay_weapons_config_discard(handle);failure(result,error.what());return -1;}
 }

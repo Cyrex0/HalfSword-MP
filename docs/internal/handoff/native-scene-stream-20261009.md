@@ -1,9 +1,15 @@
 # Native full-scene encoding checkpoint
 
+Current takeover document: [HalfSword-MP handoff, 10 October 2026](halfsword-mp-20261010.md).
+This file retains the chronological technical journal; use that handoff for
+current source/deployment state, open gates and storage-cleanup records.
+
 ## Current priority: finish native client startup within acceptance bounds
 
-The public PvP beta is released. The native authority plus two-client gameplay
-path still has no verified LIVE run. The next gate is complete, fresh gear
+The public PvP beta is released. The current strict complete-weapon native
+authority/two-client candidate has no verified LIVE run; earlier c03d8896 passed
+the original Move+Run LIVE gate (see the retained baseline below).
+The next gate is complete, fresh gear
 verification on both clients within the unchanged65s startup and250ms receipt
 bounds. Body/limb injury, dismemberment and co-op acceptance remain open.
 
