@@ -316,5 +316,5 @@ void timing_cases(){
     check(weapon_timing_rows.size()==emitted,"excluded/disabled batches emit no rows");create_logger.store(previous);weapon_batch_attempts=0;weapon_batch_timing_active=false;
 }
 }
-int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();configuration_lifecycle_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
+int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();configuration_lifecycle_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,weapons)==72&&offsetof(HsmpGameplay,initialized)==80,"ABI5 preserves weapon tail and appends initializer");
     std::cout<<"native_gameplay_weapons: "<<checks<<" checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<"native_gameplay_weapons: "<<e.what()<<'\n';return 1;}}

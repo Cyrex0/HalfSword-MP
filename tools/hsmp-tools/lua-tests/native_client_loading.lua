@@ -33,7 +33,7 @@ local function fixture(view_ready)
 end
 do
     local f=fixture(function()return true end);f.ui:tick()
-    for _,stage in ipairs({"present","character","equipment","controls","check_equipment"})do
+    for _,stage in ipairs({"present","character","native_setup","equipment","controls","check_equipment"})do
         f.ui:set(stage);f.ui:status("wait_scene",nil,nil,"native gameplay pawn preparing");f.ui:tick()
         check(f.ui.stage==stage and f:last("SetIsMarquee").args[1]==true and f:count("SetPercent")==0,
             "exact gameplay preparation pending preserves its honest indeterminate stage: "..stage)

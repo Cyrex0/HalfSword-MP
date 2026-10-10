@@ -75,17 +75,30 @@ pub struct Provider {
     ) -> i32,
     pub clear: unsafe extern "C" fn(u64, *const Guard, *mut ResultInfo) -> i32,
     pub discard: unsafe extern "C" fn(u64),
-    pub complete:
-        unsafe extern "C" fn(*const u64, u32, u32, *const Guard, *mut Proof, *mut ResultInfo) -> i32,
-    pub weapons: unsafe extern "C" fn(
-        *const u64, u32, *const Guard, *mut u32, *mut weapons::Passport,
-        u32, *mut u32, *mut ResultInfo,
+    pub complete: unsafe extern "C" fn(
+        *const u64,
+        u32,
+        u32,
+        *const Guard,
+        *mut Proof,
+        *mut ResultInfo,
     ) -> i32,
+    pub weapons: unsafe extern "C" fn(
+        *const u64,
+        u32,
+        *const Guard,
+        *mut u32,
+        *mut weapons::Passport,
+        u32,
+        *mut u32,
+        *mut ResultInfo,
+    ) -> i32,
+    pub initialized: unsafe extern "C" fn(u64, *const Guard, *mut u32, *mut ResultInfo) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_gameplay(p: *const Provider) {
-    let admitted = if !p.is_null() && unsafe { (*p).abi } == 4 {
+    let admitted = if !p.is_null() && unsafe { (*p).abi } == 5 {
         p.cast_mut()
     } else {
         std::ptr::null_mut()
@@ -119,6 +132,37 @@ fn current_output(
         wrap(object)?;
     }
     Ok(scalar)
+}
+fn initialization_query(
+    constructed: bool,
+    finished: bool,
+    failure: &GuardFailureLatch,
+    mut valid: impl FnMut() -> bool,
+    native: impl FnOnce(&mut u32, &mut ResultInfo) -> i32,
+) -> Result<u32, String> {
+    if !constructed || finished {
+        return Err("gameplay construction order".into());
+    }
+    if !valid() {
+        return Err("gameplay staged generation changed".into());
+    }
+    let mut pending = u32::MAX;
+    let mut result = ResultInfo::default();
+    let ok = native(&mut pending, &mut result);
+    if ok != 1 || result.complete != 1 {
+        return Err(failure.stage_error(&result.reason()));
+    }
+    if !valid() {
+        return Err(failure.stage_error("native source/world operation guard changed"));
+    }
+    // The pinned native count is a bounded nonnegative int32. The untouched
+    // caller sentinel is never an observed native count, even with complete=1.
+    if pending == u32::MAX {
+        return Err("native gameplay initialization count unavailable".into());
+    }
+    // A count, including zero, is only an observation. It never changes the
+    // constructed/finished flags, application proof or original receipt.
+    Ok(pending)
 }
 struct Pawn {
     handle: u64,
@@ -802,6 +846,49 @@ impl Native {
     pub unsafe fn native_gameplay_construct(&mut self, L: *mut lua_State) -> c_int {
         unsafe { self.gameplay_stage(L, 1, false) }
     }
+    pub unsafe fn native_gameplay_initialized(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            let top = lua_gettop(L);
+            let result = (|| -> Result<u32, String> {
+                if top != 1 {
+                    return Err("gameplay initialization requires one original handle".into());
+                }
+                let handle = arg_int(L, 1).filter(|v| *v > 0).ok_or("gameplay handle")? as u64;
+                let pawn = self
+                    .native_host
+                    .gameplay
+                    .pawns
+                    .values()
+                    .find(|p| p.handle == handle)
+                    .ok_or("gameplay original handle")?;
+                if !pawn.constructed || pawn.finished {
+                    return Err("gameplay construction order".into());
+                }
+                let vt = reflect::vt().ok_or("gameplay reflection")?;
+                let mut context =
+                    Context::new(self, vt, pawn.scene.clone(), pawn.world, pawn.controller)?;
+                let guard = context.ffi();
+                let p = provider()?;
+                initialization_query(
+                    pawn.constructed,
+                    pawn.finished,
+                    &context.failure,
+                    || context.valid(),
+                    |pending, result| (p.initialized)(handle, &guard, pending, result),
+                )
+            })();
+            match result {
+                Ok(pending) => {
+                    lua_pushinteger(L, i64::from(pending));
+                    1
+                }
+                Err(reason) => {
+                    lua_settop(L, top);
+                    nil_err(L, &reason)
+                }
+            }
+        }
+    }
     pub unsafe fn native_gameplay_finish(&mut self, L: *mut lua_State) -> c_int {
         unsafe { self.gameplay_stage(L, 2, false) }
     }
@@ -1258,12 +1345,21 @@ mod tests {
             let failure = GuardFailureLatch::default();
             assert!(!failure.refuse(first));
             assert!(!failure.refuse(GuardFailure::ReceiptExpired));
-            assert_eq!(failure.stage_error(reason), format!("gameplay stage: {reason}; guard_cause={tag}"));
+            assert_eq!(
+                failure.stage_error(reason),
+                format!("gameplay stage: {reason}; guard_cause={tag}")
+            );
             assert_eq!(failure.0.get(), Some(first));
-            assert_eq!(failure.stage_error("original native object changed"), "gameplay stage: original native object changed");
+            assert_eq!(
+                failure.stage_error("original native object changed"),
+                "gameplay stage: original native object changed"
+            );
         }
         let failure = GuardFailureLatch::default();
-        assert_eq!(failure.stage_error(reason), format!("gameplay stage: {reason}; guard_cause=unlatched"));
+        assert_eq!(
+            failure.stage_error(reason),
+            format!("gameplay stage: {reason}; guard_cause=unlatched")
+        );
         assert_eq!(failure.0.get(), None);
         assert_eq!(failure.stage_error(""), "gameplay stage: ");
     }
@@ -1287,6 +1383,143 @@ mod tests {
     }
     use std::time::{Duration, Instant};
 
+    #[test]
+    fn initialization_query_observes_fresh_count_without_finishing_or_renewing_scene() {
+        let scene = scene_fixture();
+        let mut state = State::default();
+        state.pawns.insert(
+            1,
+            Pawn {
+                handle: 7,
+                scene: scene.clone(),
+                descriptor: scene.descriptors[0].clone(),
+                world: Object::default(),
+                controller: Object::default(),
+                own: true,
+                constructed: true,
+                finished: false,
+                original_pawn: Object::default(),
+            },
+        );
+        for count in [3, 0, 4096] {
+            let order = std::cell::RefCell::new(Vec::new());
+            let pawn = &state.pawns[&1];
+            let observed = initialization_query(
+                pawn.constructed,
+                pawn.finished,
+                &GuardFailureLatch::default(),
+                || {
+                    order.borrow_mut().push("guard");
+                    true
+                },
+                |pending, result| {
+                    order.borrow_mut().push("native");
+                    *pending = count;
+                    result.complete = 1;
+                    1
+                },
+            )
+            .unwrap();
+            assert_eq!(observed, count);
+            assert_eq!(*order.borrow(), ["guard", "native", "guard"]);
+            assert!(state.pawns[&1].constructed && !state.pawns[&1].finished);
+            assert!(state.applied.is_none());
+            assert!(Arc::ptr_eq(&state.pawns[&1].scene.result, &scene.result));
+            assert_eq!(state.pawns[&1].scene.received, scene.received);
+        }
+    }
+    #[test]
+    fn initialization_query_refuses_order_native_incomplete_and_unwritten_count() {
+        for (constructed, finished) in [(false, false), (false, true), (true, true)] {
+            assert_eq!(
+                initialization_query(
+                    constructed,
+                    finished,
+                    &GuardFailureLatch::default(),
+                    || panic!("invalid order must not qualify"),
+                    |_, _| panic!("invalid order must not dispatch")
+                )
+                .unwrap_err(),
+                "gameplay construction order"
+            );
+        }
+        for (ok, complete) in [(-1, 1), (1, 0), (0, 0)] {
+            let guards = Cell::new(0);
+            let result = initialization_query(
+                true,
+                false,
+                &GuardFailureLatch::default(),
+                || {
+                    guards.set(guards.get() + 1);
+                    true
+                },
+                |pending, result| {
+                    *pending = 0;
+                    result.complete = complete;
+                    ok
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(
+                guards.get(),
+                1,
+                "no success proof after native refusal/incomplete"
+            );
+        }
+        assert_eq!(
+            initialization_query(
+                true,
+                false,
+                &GuardFailureLatch::default(),
+                || true,
+                |_, result| {
+                    result.complete = 1;
+                    1
+                }
+            )
+            .unwrap_err(),
+            "native gameplay initialization count unavailable"
+        );
+    }
+    #[test]
+    fn initialization_query_refuses_original_guard_loss_before_and_after_dispatch() {
+        let failure = GuardFailureLatch::default();
+        assert_eq!(
+            initialization_query(
+                true,
+                false,
+                &failure,
+                || failure.refuse(GuardFailure::OriginalAdmission),
+                |_, _| panic!("lost original guard must not dispatch")
+            )
+            .unwrap_err(),
+            "gameplay staged generation changed"
+        );
+        for cause in [GuardFailure::OriginalAdmission, GuardFailure::Generation] {
+            let failure = GuardFailureLatch::default();
+            let calls = Cell::new(0);
+            let result = initialization_query(
+                true,
+                false,
+                &failure,
+                || {
+                    calls.set(calls.get() + 1);
+                    calls.get() == 1 || failure.refuse(cause)
+                },
+                |pending, result| {
+                    *pending = 0;
+                    result.complete = 1;
+                    1
+                },
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                failure.stage_error("native source/world operation guard changed")
+            );
+            assert_eq!(failure.0.get(), Some(cause));
+            assert_eq!(calls.get(), 2);
+        }
+    }
     #[test]
     fn current_scalar_mode_requires_an_explicit_boolean_without_stack_changes() {
         unsafe {
@@ -1577,7 +1810,8 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NativeState, velocity), 56);
         assert_eq!(std::mem::offset_of!(NativeState, cache_rotation), 112);
         assert_eq!(std::mem::size_of::<Proof>(), 112);
-        assert_eq!(std::mem::size_of::<Provider>(), 80);
+        assert_eq!(std::mem::size_of::<Provider>(), 88);
+        assert_eq!(std::mem::offset_of!(Provider, initialized), 80);
         assert_eq!(std::mem::offset_of!(Provider, weapons), 72);
         assert_eq!(std::mem::offset_of!(Provider, complete), 64);
         assert_eq!(std::mem::offset_of!(Provider, clear), 48);
@@ -1619,7 +1853,7 @@ mod tests {
             abi: u32,
             pad: u32,
         }
-        for abi in [1, 2, 3] {
+        for abi in [1, 2, 3, 4] {
             let old = OldHeader { abi, pad: 0 };
             unsafe {
                 hsmp_native_set_gameplay((&old as *const OldHeader).cast());

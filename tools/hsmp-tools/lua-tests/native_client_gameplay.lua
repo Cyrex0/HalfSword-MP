@@ -39,6 +39,14 @@ local function fixture()
         f.wrappers=f.wrappers+1;return f.pawns[handle]
     end
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
+    N.native_gameplay_initialized=function(handle)
+        f.setup_queries=(f.setup_queries or 0)+1;f.calls[#f.calls+1]="initialized"..handle
+        if f.expired then return nil,"original native weak expired"end
+        if f.setup_error then return nil,f.setup_error end
+        if f.setup_hook then f.setup_hook(handle)end
+        if f.setup_count~=nil then return f.setup_count end
+        return 0
+    end
     N.native_gameplay_finish=function(handle)f.calls[#f.calls+1]="possess"..handle;return true end
     N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";f.clock=f.clock+20;return true,f.applied_scene or scene end
     N.native_gameplay_weapons=function(scene)
@@ -54,6 +62,7 @@ local function fixture()
         f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";f.clock=f.clock+30;if f.confirm_error then return nil,f.confirm_error end;return true,scene
     end
     N.native_gameplay_clear=function(forget)f.clears=f.clears+1;if forget then f.forgot=f.forgot+1 end;return true end
+    f.native=N
     local Passport={before_finish=function(recipe,env)
         check(env.guard()==true and env.current()==f.pawns[recipe.passport.fixture_id],"passport writes only fresh original deferred pawn")
         f.calls[#f.calls+1]="passport"..recipe.passport.fixture_id;return true
@@ -95,7 +104,7 @@ local function fixture()
             f.progress[#f.progress+1]=stage
         end,fname=function(name)return name end})
     function f:bootstrap()
-        for _=1,12 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
+        for _=1,14 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
     end
     function f:detail()
         self.probe_detail=true
@@ -104,6 +113,61 @@ local function fixture()
             GetWorld=function()f.clock=f.clock+7;return{GetAddress=function()return 88 end}end}end
     end
     return f
+end
+local function setup_fixture()
+    local f=fixture()
+    for _=1,3 do local ok,why=f.game:apply(f.scene);check(ok==nil and why==Gameplay.PENDING,"native setup follows original staged construction")end
+    check(f.game.rows[1].stage=="native_setup"and f.setup_queries==nil,"construction enters native setup without claiming completion")
+    return f
+end
+do
+    local f=setup_fixture();f.setup_count=2
+    for _=1,2 do
+        local ok,why=f.game:apply(f.scene)
+        check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="native_setup"and
+            f.armor==0 and f.weapons==0 and f.equipment==0 and f.apply_count==0 and f.confirmed==0 and #f.actions==0 and
+            not f.game:view_ready(f.scene),"positive native action count remains pending before every gear/possession/apply/readiness path")
+    end
+    check(f.progress[#f.progress]=="native_setup"and f.setup_queries==2,"pending native initialization visibly reports the actual setup stage and is freshly queried")
+    f.setup_count=0;local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==Gameplay.PENDING and f.game.rows[1].stage=="equipment"and f.armor==0 and f.weapons==0,
+        "exact zero count advances only the next yielded equipment stage")
+    f.game:apply(f.scene)
+    check(f.armor==1 and f.weapons==1 and f.equipment==1 and f.game.rows[1].stage=="possess"and f.apply_count==0 and f.confirmed==0,
+        "authority gear restoration runs only on the separate iteration after native setup completed")
+end
+do
+    local f=setup_fixture();f.setup_error="original pending action query refused"
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.setup_error and f.armor==0 and f.confirmed==0 and not f.game.ready,
+        "native initialization nil refusal preserves the original error and blocks gear/readiness")
+end
+for _,count in ipairs({-1,1.0,false,{},math.huge})do
+    local f=setup_fixture();f.setup_count=count;local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay pending action count unavailable"and f.armor==0 and f.game.rows[1].stage=="native_setup",
+        "only exact nonnegative integer native action counts admit the setup query")
+end
+do
+    local f=setup_fixture();f.expired=true;local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="original native weak expired"and f.armor==0 and f.confirmed==0,
+        "pending initialization retains the native original-pawn qualification refusal")
+end
+do
+    local f=setup_fixture();f.native.native_gameplay_initialized=nil;local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay API unavailable: native_gameplay_initialized"and f.armor==0,
+        "missing initialization API cannot fall back to immediate equipment setup")
+end
+do
+    local f=setup_fixture();f.setup_hook=function()f.world="w2"end
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why=="native gameplay world changed"and f.armor==0 and f.game.rows[1].stage=="native_setup",
+        "world drop inside the initialized query refuses before advancing the original pawn")
+    f.game:drop();check(f.forgot==1 and #f.game.rows==0 and not f.game.ready,"world drop forgets pending original native handles without getter reuse")
+end
+do
+    local f=setup_fixture();f.setup_count=1;f.game:apply(f.scene);f.scene.generation="g9";f.game:sync(f.scene)
+    check(f.clears==1 and f.game.key==nil and #f.game.rows==0 and f.armor==0,
+        "generation replacement closes pending original native setup before a new binding can be adopted")
 end
 do
     local f=fixture();f:bootstrap();f:detail();f.scene.state=2;f.scene.gameplay_proof=true
@@ -193,9 +257,9 @@ for _,state in ipairs({1,2})do
 end
 do
     local f=fixture();f:bootstrap()
-    check(table.concat(f.progress,",")=="present,character,present,equipment,controls,check_equipment,present,character,present,equipment,controls,check_equipment",
+    check(table.concat(f.progress,",")=="present,character,present,native_setup,equipment,controls,check_equipment,present,character,present,native_setup,equipment,controls,check_equipment",
         "each yielded native preparation step reports its actual work stage")
-    check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,weapons2,gear2,possess2,gear2","native construction/live armor/weapons/gear/possession order including post-possession proof")
+    check(table.concat(f.calls,",")=="begin1,passport1,construct1,initialized1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,initialized2,armor2,weapons2,gear2,possess2,gear2","native construction/completed initialization/live armor/weapons/gear/possession order including post-possession proof")
     check(f.apply_count==0 and f.confirmed==0 and not f.game:view_ready(f.scene),"receipt and staged construction never become view readiness")
     check(f.scalar_guards>0 and f.wrappers>0,"discarded guards use explicit scalar admission while actual getters retain full wrappers")
     f.scene.gameplay_proof=true;local ok,actual=f.game:apply(f.scene)
@@ -230,14 +294,14 @@ do
     local ok,why=f.game:apply(f.scene);check(ok==nil and why==f.confirm_error and not f.game:view_ready(f.scene),"last native raw census refusal never fabricates readiness")
 end
 do
-    local f=fixture();for _=1,3 do f.game:apply(f.scene)end
+    local f=fixture();for _=1,4 do f.game:apply(f.scene)end
     f.armor_error="original construction armor restore refused"
     local ok,why=f.game:apply(f.scene)
     check(ok==nil and why==f.armor_error and f.equipment==0 and f.confirmed==0,
         "construction armor restoration failure prevents verification, possession and readiness")
 end
 do
-    local f=fixture();for _=1,3 do f.game:apply(f.scene)end
+    local f=fixture();for _=1,4 do f.game:apply(f.scene)end
     f.weapon_error="native exact weapon binding unsupported"
     local ok,why=f.game:apply(f.scene)
     check(ok==nil and why==f.weapon_error and f.armor==1 and f.weapons==1 and f.equipment==0 and f.confirmed==0,

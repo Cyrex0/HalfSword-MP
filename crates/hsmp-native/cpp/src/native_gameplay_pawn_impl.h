@@ -138,6 +138,10 @@ struct GameplayCurrentTrace {
         logger("gameplay_current",row.complete,elapsed,attempt,row.operations,row.stage,row.reason,label);
     }
 };
+struct GameplayInitialization {
+    Obj instance{};LookupEntry instance_path,pawn_path;HsmpProp world_instance{};
+    const void* manager{};uint64_t callback_weak{};GameplayCodeProfile code;
+};
 struct GameplayPawn {
     Obj world{},controller{},pawn{},actor_class{},level{};
     Transform initial{};uint32_t own{},stage{};
@@ -147,6 +151,7 @@ struct GameplayPawn {
     GameplayCurrentObservation current_binding;
     std::optional<GameplayApplied> applied;
     std::optional<GameplayHud> ui;
+    std::optional<GameplayInitialization> initialization;
 };
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
 std::mutex gameplay_mutex;
@@ -894,6 +899,19 @@ int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,Hs
         *pawn=entry.pawn;result->complete=1;trace.observation.complete=1;trace.observation.operations=result->operations;return 1;
     }catch(const std::exception& error){failure(result,error.what());if(result)trace.observation.operations=result->operations;return -1;}
 }
+void gameplay_tick_disabled(Obj pawn,HsmpViewResult* result){
+    Function tick(L"/Script/Engine.Actor:IsActorTickEnabled");
+    const auto output=tick.field(L"ReturnValue",L"BoolProperty",1);
+    require(output.offset==0&&output.bool_offset==0&&output.bool_mask==1,"native gameplay actor tick signature");
+    tick.call(pawn,result);
+    require(tick.value<uint8_t>(L"ReturnValue",L"BoolProperty")==0,"native gameplay actor tick remains enabled");
+}
+void gameplay_stop_tick(Obj pawn,HsmpViewResult* result){
+    Function tick(L"/Script/Engine.Actor:SetActorTickEnabled");
+    tick.boolean(L"bEnabled",false);tick.call(pawn,result);
+    gameplay_tick_disabled(pawn,result);
+}
+#include "native_gameplay_initialization_impl.h"
 int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
@@ -904,6 +922,8 @@ int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,
         Function finish(L"/Script/Engine.GameplayStatics:FinishSpawningActor");finish.object(L"Actor",entry.pawn);
         finish.put(L"SpawnTransform",L"StructProperty",engine(entry.initial),L"Transform");finish.enumeration(L"TransformScaleMethod",0);
         finish.call(find(L"/Script/Engine.Default__GameplayStatics"),result);require(same(finish.returned(),entry.pawn),"native gameplay construction returned another pawn");
+        gameplay_stop_tick(entry.pawn,result);
+        gameplay_initialization_capture(entry);
         gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);entry.stage=2;*pawn=entry.pawn;result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
@@ -914,6 +934,7 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
     gameplay_weapons_config_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
+        require(gameplay_initialization_count(entry)==0,"native gameplay initialization remains pending");
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
             require(same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)&&same(object_property(entry.pawn,L"Controller"),entry.controller),"native gameplay possession readback failed");}
         else require(!object_property(entry.pawn,L"Controller").weak,"native gameplay remote pawn unexpectedly possessed");
@@ -925,6 +946,8 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);
         // Discover immutable gear metadata during generation-bound preparation.
         // Every application still captures and verifies its own fresh values.
+        gameplay_tick_disabled(entry.pawn,result);
+        require(gameplay_initialization_count(entry)==0,"native gameplay initialization remains pending");
         gameplay_weapons_prepare(handle,result);lookup_finish();gameplay_pure(entry);
         if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
     }catch(const std::exception& error){gameplay_weapons_config_discard(handle);failure(result,error.what());return -1;}
@@ -1128,4 +1151,4 @@ int32_t gameplay_complete(const uint64_t* handles,uint32_t count,uint32_t requir
         result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-const HsmpGameplay gameplay_provider{4,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete,gameplay_weapons};
+const HsmpGameplay gameplay_provider{5,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete,gameplay_weapons,gameplay_initialized};

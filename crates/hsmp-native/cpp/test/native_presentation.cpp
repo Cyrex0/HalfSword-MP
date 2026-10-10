@@ -585,13 +585,15 @@ std::array<LifetimeObject*,32> skeletal_materials{},skeletal_second_materials{};
 int skeletal_size{};
 bool skeletal_asset_missing{},skeletal_wrong_owner{};
 int skeletal_material_gets{},skeletal_material_sets{};
-enum class SkeletalFnId {Add,Finish,BeginSpawn,FinishSpawn,ActorCollision,ActorTick,PostProcess,Anim,Cloth,Suspend,Suspended,Mesh,Leader,Deformer,Visibility,Mid,NumMaterials,Vector,Quat,Transform,Linear,Color,ParameterInfo,Count};
+enum class SkeletalFnId {Add,Finish,BeginSpawn,FinishSpawn,ActorCollision,ActorTick,ActorTickRead,PostProcess,Anim,Cloth,Suspend,Suspended,Mesh,Leader,Deformer,Visibility,Mid,NumMaterials,Vector,Quat,Transform,Linear,Color,ParameterInfo,Count};
 struct SkeletalFn {LifetimeObject object{};int32_t bytes{};std::vector<HsmpProp> fields;};
 std::array<SkeletalFn,static_cast<size_t>(SkeletalFnId::Count)> skeletal_functions{};
 std::map<std::wstring,LifetimeObject*> skeletal_function_paths;
 LifetimeObject dynamic_material_class{929,&meta},dynamic_material{932,&dynamic_material_class},instance_material_class{933,&meta};
 int skeletal_adds{},skeletal_finishes{},skeletal_mids{},skeletal_num_material_calls{},skeletal_leaders{};
 bool skeletal_bad_null_set{},skeletal_make_active_after_material{};
+bool gameplay_tick_enabled{},gameplay_tick_set_ignored{},gameplay_tick_guard_valid{true},gameplay_tick_guard_drop{};
+std::vector<uint32_t> gameplay_tick_calls;
 enum class SkeletalMutation {None,Asset,Deprecated,MeshObject,Proxy,ProxyCopy,Override,Material,MaterialHeader,MaterialName,Name,ClassName,Garbage,Travel,Tick,Active,Leader,Animation,ClothAllow,ClothResume,PostProcess,ClothingInteractor};
 SkeletalMutation skeletal_later_mutation{},skeletal_final_mutation{};int skeletal_mutation_at{};bool skeletal_mutation_applied{};
 bool skeletal_object(const void* p){return p==&skeletal_first||p==&skeletal_second;}
@@ -782,7 +784,12 @@ void scene_call(void* object,void* fn,void* params){
         if(id==SkeletalFnId::Add){++skeletal_adds;LifetimeObject* original_class{};std::memcpy(&original_class,bytes,8);check(original_class==&skeletal_class,"production create requests exact SkeletalMeshComponent without a pose leader");
             auto value=&skeletal_second;std::memcpy(bytes+112,&value,8);return;}
         if(id==SkeletalFnId::Finish){++skeletal_finishes;LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==&skeletal_second.identity,"production FinishAddComponent retains original created component");return;}
-        if(id==SkeletalFnId::ActorCollision||id==SkeletalFnId::ActorTick){check(object==&actor&&!(bytes[0]&1),"owned mirror actor collision and tick are disabled");return;}
+        if(id==SkeletalFnId::ActorCollision){check(object==&actor&&!(bytes[0]&1),"owned mirror actor collision is disabled");return;}
+        if(id==SkeletalFnId::ActorTick){check(object==&actor&&bytes[0]==0,"actor tick setter targets the original actor with exact false");
+            gameplay_tick_calls.push_back(0);if(!gameplay_tick_set_ignored)gameplay_tick_enabled=false;
+            if(gameplay_tick_guard_drop)gameplay_tick_guard_valid=false;return;}
+        if(id==SkeletalFnId::ActorTickRead){check(object==&actor,"actor tick readback targets the same original actor");
+            gameplay_tick_calls.push_back(1);bytes[0]=gameplay_tick_enabled?1:0;return;}
         if(id==SkeletalFnId::Deformer){LifetimeObject* value=nullptr;std::memcpy(bytes,&value,8);return;}
         if(id==SkeletalFnId::NumMaterials){++skeletal_num_material_calls;int32_t value=0;std::memcpy(bytes,&value,4);return;}
         if(id==SkeletalFnId::Visibility){static_cast<uint8_t*>(object)[0x1d0]=bytes[0]&1;return;}
@@ -869,6 +876,7 @@ void skeletal_reset(HsmpReflect& reflect){
     skeletal_asset_missing=skeletal_wrong_owner=false;skeletal_material_gets=skeletal_material_sets=0;
     skeletal_later_mutation=skeletal_final_mutation=SkeletalMutation::None;skeletal_mutation_at=0;skeletal_mutation_applied=false;
     skeletal_adds=skeletal_finishes=skeletal_mids=skeletal_num_material_calls=skeletal_leaders=0;skeletal_bad_null_set=skeletal_make_active_after_material=false;
+    gameplay_tick_enabled=true;gameplay_tick_set_ignored=gameplay_tick_guard_drop=false;gameplay_tick_guard_valid=true;gameplay_tick_calls.clear();
     skeletal_function_paths.clear();
     const auto function=[&](SkeletalFnId id,const wchar_t* path,int32_t bytes,std::initializer_list<HsmpProp> fields){
         const auto index=static_cast<size_t>(id);auto& fn=skeletal_functions[index];fn.object={10000+index,&function_class};fn.bytes=bytes;fn.fields=fields;
@@ -879,6 +887,7 @@ void skeletal_reset(HsmpReflect& reflect){
     function(SkeletalFnId::FinishSpawn,L"/Script/Engine.GameplayStatics:FinishSpawningActor",120,{object_field(L"Actor",0),scene_field(L"SpawnTransform",L"StructProperty",96,16,0,L"Transform"),scene_field(L"TransformScaleMethod",L"ByteProperty",1,8),object_field(L"ReturnValue",112)});
     function(SkeletalFnId::ActorCollision,L"/Script/Engine.Actor:SetActorEnableCollision",1,{scene_field(L"bNewActorEnableCollision",L"BoolProperty",1,0,1)});
     function(SkeletalFnId::ActorTick,L"/Script/Engine.Actor:SetActorTickEnabled",1,{scene_field(L"bEnabled",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::ActorTickRead,L"/Script/Engine.Actor:IsActorTickEnabled",1,{scene_field(L"ReturnValue",L"BoolProperty",1,0,1)});
     function(SkeletalFnId::PostProcess,L"/Script/Engine.SkeletalMeshComponent:SetDisablePostProcessBlueprint",1,{scene_field(L"bInDisablePostProcess",L"BoolProperty",1,0,1)});
     function(SkeletalFnId::Anim,L"/Script/Engine.SkeletalMeshComponent:SetAnimClass",8,{scene_field(L"NewClass",L"ClassProperty",8,0)});
     function(SkeletalFnId::Cloth,L"/Script/Engine.SkeletalMeshComponent:SetAllowClothActors",1,{scene_field(L"bInAllow",L"BoolProperty",1,0,1)});
@@ -898,6 +907,85 @@ void skeletal_reset(HsmpReflect& reflect){
     structure(SkeletalFnId::Color,L"/Script/CoreUObject.Color",4,{scene_field(L"B",L"ByteProperty",1,0),scene_field(L"G",L"ByteProperty",1,1),scene_field(L"R",L"ByteProperty",1,2),scene_field(L"A",L"ByteProperty",1,3)});
     structure(SkeletalFnId::ParameterInfo,L"/Script/Engine.MaterialParameterInfo",16,{scene_field(L"Name",L"NameProperty",8,0),scene_field(L"Association",L"ByteProperty",1,8),scene_field(L"Index",L"IntProperty",4,12)});
     layouts_verified=false;layout_objects.clear();
+}
+void gameplay_tick_checks(HsmpReflect& reflect){
+    HsmpViewResult result{};int context{};
+    const HsmpViewGuard guard{&context,[](void*)->int32_t{return gameplay_tick_guard_valid?1:0;}};
+    const auto stop=[&]{OperationScope scope(&guard,keep(&old_world));gameplay_stop_tick(keep(&actor),&result);};
+    const auto verify=[&]{OperationScope scope(&guard,keep(&old_world));gameplay_tick_disabled(keep(&actor),&result);};
+    skeletal_reset(reflect);stop();
+    check(gameplay_tick_calls==std::vector<uint32_t>{0,1}&&!gameplay_tick_enabled&&result.operations==2,"production tick shutdown dispatches setter then fresh same-original false readback");
+    gameplay_tick_calls.clear();verify();
+    check(gameplay_tick_calls==std::vector<uint32_t>{1},"preparation tick validation is a fresh getter without a second setter");
+    gameplay_tick_enabled=true;gameplay_tick_calls.clear();rejects(verify,"native latent tick reenable refuses preparation");
+    check(gameplay_tick_calls==std::vector<uint32_t>{1},"enabled preparation readback does not silently disable or grant readiness");
+    skeletal_reset(reflect);gameplay_tick_set_ignored=true;rejects(stop,"native tick setter whose readback stays enabled refuses");
+    check(gameplay_tick_calls==std::vector<uint32_t>{0,1},"failed false readback still follows the original setter");
+    skeletal_reset(reflect);skeletal_functions[static_cast<size_t>(SkeletalFnId::ActorTickRead)].fields[0].cls=name(L"ByteProperty");
+    rejects(stop,"missing exact native BoolProperty return refuses before getter dispatch");
+    check(gameplay_tick_calls==std::vector<uint32_t>{0},"malformed tick getter cannot dispatch or provide a default false");
+    skeletal_reset(reflect);gameplay_tick_guard_drop=true;rejects(stop,"original borrowed guard loss during tick setter refuses");
+    check(gameplay_tick_calls==std::vector<uint32_t>{0},"guard loss prevents subsequent readback on the old actor");
+    skeletal_reset(reflect);
+}
+struct InitializationFixture {
+    alignas(8) std::array<uint8_t,0x50> manager{},actions{};
+    alignas(8) std::array<uint8_t,64> objects{};
+    alignas(8) std::array<uint8_t,48> action_rows{};
+    alignas(4) std::array<int32_t,4> buckets{{0,-1,-1,-1}};
+    uint64_t weak{uint64_t(7)<<32|3};
+    template<class Bytes,class T>static void write(Bytes& bytes,size_t at,T value){std::memcpy(bytes.data()+at,&value,sizeof(value));}
+    InitializationFixture(){reset();}
+    void reset(){
+        manager.fill(0);actions.fill(0);objects.fill(0);action_rows.fill(0);buckets.fill(-1);buckets[0]=0;
+        write(manager,0,reinterpret_cast<uintptr_t>(objects.data()));write(manager,8,int32_t{1});write(manager,12,int32_t{2});
+        write(manager,0x40,reinterpret_cast<uintptr_t>(buckets.data()));write(manager,0x48,int32_t{4});
+        write(objects,0,weak);write(objects,8,reinterpret_cast<uintptr_t>(actions.data()));write(objects,0x18,int32_t{-1});
+        write(actions,0,reinterpret_cast<uintptr_t>(action_rows.data()));write(actions,8,int32_t{2});write(actions,12,int32_t{2});write(actions,0x34,int32_t{1});
+    }
+};
+InitializationFixture* initialization_fixture{};int initialization_calls{};int32_t initialization_answer{1};
+bool initialization_mutate{},initialization_wrong_target{};
+int32_t initialization_native_count(const void* manager,uint64_t weak){
+    ++initialization_calls;initialization_wrong_target=manager!=initialization_fixture->manager.data()||weak!=initialization_fixture->weak;
+    if(initialization_mutate)InitializationFixture::write(initialization_fixture->manager,0x34,int32_t{1});return initialization_answer;
+}
+void gameplay_initialization_checks(){
+    check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,initialized)==80&&gameplay_provider.abi==5&&gameplay_provider.initialized==gameplay_initialized,"initializer is private ABI5 tail without moving existing providers");
+    InitializationFixture storage;initialization_fixture=&storage;initialization_calls=0;initialization_answer=1;initialization_wrong_target=false;
+    const auto query=[&]{return gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,gameplay_quat_readable);};
+    check(query()==1&&initialization_calls==1&&!initialization_wrong_target,"actual bounded query dispatch receives exact original positive callback weak and manager");
+    check(gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,gameplay_quat_readable,true)==1,"initial witness requires an actual positive original pending query");
+    InitializationFixture::write(storage.actions,0x34,int32_t{2});initialization_answer=0;
+    check(query()==0&&initialization_calls==3,"subsequent fresh empty action map returns zero without storing success");
+    rejects([&]{gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,gameplay_quat_readable,true);},"zero first observation cannot become an initialization witness");
+    InitializationFixture::write(storage.actions,0x34,int32_t{1});initialization_answer=1;
+    check(query()==1&&initialization_calls==5,"a later pending action remains visible after prior zero");
+    const auto bad=[&](auto change,const char* label){storage.reset();initialization_calls=0;change();rejects(query,label);check(initialization_calls==0,"malformed latent storage refuses before any native count dispatch");};
+    bad([&]{InitializationFixture::write(storage.manager,8,int32_t{-1});},"negative manager Num refuses");
+    bad([&]{InitializationFixture::write(storage.manager,12,int32_t{0});},"manager Num greater than Max refuses");
+    bad([&]{InitializationFixture::write(storage.manager,12,int32_t{4097});},"unsupported manager capacity refuses");
+    bad([&]{InitializationFixture::write(storage.manager,0x34,int32_t{2});},"manager free count exceeding Num refuses");
+    bad([&]{InitializationFixture::write(storage.manager,0x48,int32_t{3});},"non-power-of-two hash geometry refuses");
+    bad([&]{InitializationFixture::write(storage.manager,0x40,uintptr_t{});},"inline hash cannot exceed its two actual buckets");
+    bad([&]{storage.buckets[0]=2;},"chain index outside current Num refuses");
+    bad([&]{InitializationFixture::write(storage.objects,0,storage.weak+1);InitializationFixture::write(storage.objects,0x18,int32_t{0});},"cyclic original manager chain refuses");
+    bad([&]{InitializationFixture::write(storage.actions,0x34,int32_t{-1});},"negative action free count refuses");
+    bad([&]{InitializationFixture::write(storage.actions,0x34,int32_t{3});},"action free count exceeding Num refuses");
+    bad([&]{InitializationFixture::write(storage.actions,0,uintptr_t{});},"allocated action storage cannot be null");
+    storage.reset();initialization_calls=0;
+    rejects([&]{gameplay_initialization_query(storage.manager.data(),uint64_t{3},initialization_native_count,gameplay_quat_readable);},"zero serial cannot become a false completed miss");check(initialization_calls==0,"zero serial refuses before native query");
+    InitializationFixture::write(storage.manager,0x34,int32_t{1});InitializationFixture::write(storage.manager,0x48,int32_t{0});initialization_answer=0;
+    check(query()==0,"legal all-free manager needs no nonexistent hash bucket");
+    storage.reset();initialization_answer=-1;rejects(query,"negative native count is never cast to u32");
+    initialization_answer=0;rejects(query,"native false zero cannot override the original positive storage count");
+    initialization_answer=1;initialization_mutate=true;rejects(query,"original manager mutation during native query is caught by fresh second pass");initialization_mutate=false;
+    storage.reset();initialization_calls=0;
+    const auto inaccessible=[&](const void* pointer,size_t bytes){return pointer!=storage.objects.data()&&gameplay_quat_readable(pointer,bytes);};
+    rejects([&]{gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,inaccessible);},"unreadable original manager allocation refuses");check(initialization_calls==0,"unreadable storage never reaches native traversal");
+    const auto previous_lookup=active_lookup;LookupState nested;active_lookup=&nested;HsmpViewResult refused{};uint32_t unwritten=UINT32_MAX;
+    check(gameplay_initialized(0,nullptr,&unwritten,&refused)==-1&&unwritten==UINT32_MAX&&!refused.complete,"callback-nested initializer refuses before locking or writing a completed count");active_lookup=previous_lookup;
+    initialization_fixture=nullptr;
 }
 void skeletal_checks(HsmpReflect& reflect){
     HsmpViewResult result{};HsmpViewVertexState proof{};
@@ -1816,7 +1904,7 @@ void gameplay_hud_checks(HsmpReflect& reflect){
         entry.ui=hud;entry.ui->created=false;const auto before=hud_fixture_calls;gameplay_hud_remove(entry,nullptr);check(hud_fixture_calls==before,"reused HUD is never removed by helper cleanup");
         entry.ui->created=true;entry.ui->bound=false;hud_fixture_visible=true;gameplay_hud_remove(entry,nullptr);
         check(hud_fixture_calls==before+2&&!hud_fixture_visible&&entry.ui->created&&entry.ui->widget_path.original.size()>0,"partial helper-created HUD retains original ownership and guarded cleanup removes only it");
-        check(gameplay_provider.abi==4&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical ABI4 weapon tail integration");
+        check(gameplay_provider.abi==5&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical weapon tail integration in ABI5");
         gameplay_weapons_reset();const uint64_t missing=1;rejects([&]{gameplay_weapons_final(&missing,1);},"final confirmation requires a retained complete weapon snapshot");
         }
         entry.ui.reset();hud_fixture_umg_queries=hud_fixture_local_queries=0;
@@ -2132,6 +2220,8 @@ int main() {
         arm_publication_checks(reflect);
         empty_checks(reflect);
         skeletal_checks(reflect);
+        gameplay_tick_checks(reflect);
+        gameplay_initialization_checks();
         batch_checks(reflect);
         pose_checks(reflect);
         present_profile_checks(reflect);

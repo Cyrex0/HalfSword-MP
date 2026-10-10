@@ -10,6 +10,12 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Disable client fighters' native Actor tick after construction and verify it
+  remains disabled before gear preparation, preventing local tick-driven weapon
+  replacement. Native startup-completion and in-game verification are pending.
+- Wait for freshly observed native pawn initialization to complete before
+  restoring equipment. Keep clients under an explicit loading stage while
+  native work remains queued, with no timer-based completion or receipt renewal.
 - Report the original object, copied path source, fighter role and expected/current
   flags when weapon metadata fails verification, without extra object reads.
 - Prepare original weapon metadata during spawning, then freshly verify current

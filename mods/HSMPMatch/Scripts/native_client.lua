@@ -69,7 +69,7 @@ function M.start(opts)
         progress=function(stage,done,total)loading:set(stage,done,total)end})or nil
     if gameplay_mode then
         local gameplay_native={}
-        for _,api in ipairs({"native_gameplay_begin","native_gameplay_construct","native_gameplay_finish","native_gameplay_apply"})do
+        for _,api in ipairs({"native_gameplay_begin","native_gameplay_construct","native_gameplay_initialized","native_gameplay_finish","native_gameplay_apply"})do
             gameplay_native[api]=function(...)return traced(api,N[api],...)end
         end
         gameplay_native.native_gameplay_current=N.native_gameplay_current;gameplay_native.native_gameplay_clear=N.native_gameplay_clear

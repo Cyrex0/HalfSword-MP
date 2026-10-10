@@ -35,6 +35,7 @@ struct HsmpGameplay {
     // Only *written rows/aliases are usable after complete success.
     int32_t (*weapons)(const uint64_t* handles,uint32_t count,const HsmpViewGuard*,
         uint32_t* aliases,HsmpGameplayWeaponPassport* passports,uint32_t capacity,uint32_t* written,HsmpViewResult*);
+    int32_t (*initialized)(uint64_t handle,const HsmpViewGuard*,uint32_t* pending,HsmpViewResult*);
 };
 void hsmp_native_set_gameplay(const HsmpGameplay*);
 }
@@ -44,8 +45,9 @@ static_assert(offsetof(HsmpGameplayState,orientation)==24);
 static_assert(offsetof(HsmpGameplayState,velocity)==56);
 static_assert(offsetof(HsmpGameplayState,cache_rotation)==112);
 static_assert(sizeof(HsmpGameplayProof)==112);
-static_assert(sizeof(HsmpGameplay)==80);
+static_assert(sizeof(HsmpGameplay)==88);
 static_assert(offsetof(HsmpGameplay,clear)==48);
 static_assert(offsetof(HsmpGameplay,discard)==56);
 static_assert(offsetof(HsmpGameplay,complete)==64);
 static_assert(offsetof(HsmpGameplay,weapons)==72);
+static_assert(offsetof(HsmpGameplay,initialized)==80);

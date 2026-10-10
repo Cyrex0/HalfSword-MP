@@ -1,7 +1,7 @@
 -- Native pawn bootstrap. Receipt, construction and possession are separate.
 local M={}
 local PENDING="native gameplay pawn preparing"
-local preparation={begin="present",passport="character",construct="present",equipment="equipment",possess="controls",post_equipment="check_equipment"}
+local preparation={begin="present",passport="character",construct="present",native_setup="native_setup",equipment="equipment",possess="controls",post_equipment="check_equipment"}
 local BOOTSTRAP_KEYS={schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true}
 local function fail(reason)error(reason,0)end
 local function exact_integer(v)return math.type(v)=="integer" and v>=0 end
@@ -202,7 +202,12 @@ function M.new(env)
                     if applied~=true then fail(why or"native gameplay passport refused")end;row.stage="construct"
                 elseif row.stage=="construct"then
                     local built,why=guarded(require_api("native_gameplay_construct"),row.handle)
-                    if built~=true then fail(why or"native gameplay construction refused")end;row.stage="equipment"
+                    if built~=true then fail(why or"native gameplay construction refused")end;row.stage="native_setup"
+                elseif row.stage=="native_setup"then
+                    local pending,why=guarded(require_api("native_gameplay_initialized"),row.handle)
+                    if pending==nil then fail(why or"native gameplay initialization unavailable")end
+                    if not exact_integer(pending)then fail("native gameplay pending action count unavailable")end
+                    if pending==0 then row.stage="equipment"end
                 elseif row.stage=="equipment"then
                     if type(Passport.restore_live_armor)~="function"then fail("native gameplay live armor restoration unavailable")end
                     local restored,restore_reason=Passport.restore_live_armor(row.recipe,passport_env(row))

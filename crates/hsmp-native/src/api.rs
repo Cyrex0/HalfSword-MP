@@ -246,6 +246,7 @@ entry! {
     l_native_gameplay_begin => Guard::GameThread, |n,L| n.native_gameplay_begin(L);
     l_native_gameplay_current => Guard::GameThread, |n,L| n.native_gameplay_current(L);
     l_native_gameplay_construct => Guard::GameThread, |n,L| n.native_gameplay_construct(L);
+    l_native_gameplay_initialized => Guard::GameThread, |n,L| n.native_gameplay_initialized(L);
     l_native_gameplay_finish => Guard::GameThread, |n,L| n.native_gameplay_finish(L);
     l_native_gameplay_apply => Guard::GameThread, |n,L| n.native_gameplay_apply(L);
     l_native_gameplay_confirm => Guard::GameThread, |n,L| n.native_gameplay_confirm(L);
@@ -349,6 +350,7 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_gameplay_begin", l_native_gameplay_begin),
     ("native_gameplay_current", l_native_gameplay_current),
     ("native_gameplay_construct", l_native_gameplay_construct),
+    ("native_gameplay_initialized", l_native_gameplay_initialized),
     ("native_gameplay_finish", l_native_gameplay_finish),
     ("native_gameplay_apply", l_native_gameplay_apply),
     ("native_gameplay_confirm", l_native_gameplay_confirm),

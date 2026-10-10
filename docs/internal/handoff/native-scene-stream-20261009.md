@@ -2,6 +2,64 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual574a6d49 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. First190335-b8960d run fails startup before native readiness, with no
+weapon evidence. The same-build190634-ebf737 retry reaches native preparation:
+C2's first warm batch identifies the failed original as a remote fighter weapon
+root (src=weapon,row0,own0,depth0,pawn0), RF00000008 to40000008 (Garbage),
+name7ffff97000061953/class0000000000061953. Its phase0 is674us; C1 separately
+reports a generation guard refusal. The harness headline selected C1, so BOTH
+clients must be inspected. These observations do not establish the causal order
+of the two failures. Neither run reaches LIVE, input or model/HUD pixel gates.
+Both cleanups verify all four owned processes absent,20 save hashes unchanged,
+and no dumps/children. Secondary placement is unqualified for the startup-only
+run (no UnrealWindow available); the retry passes early placement.
+
+Native primary evidence identifies ReceiveTick's conditional fists replacement
+and independent delayed hand/sheath setup as possible gear retirement routes.
+The observed destroyed weapon does not prove which route executed. A reviewed
+correction disables native Actor tick on the original Willie immediately after
+FinishSpawningActor and freshly requires it still disabled before gear metadata
+preparation. It preserves component physics, latent processing and all original
+guards. Strict provider compile and focused native2205/weapons167 PASS; actual
+verification remains pending. Native Tick-off does not prove setup completion,
+body/damage parity or complete client inertness.
+
+The next implementation uses the pinned native ALL-action count seam3717FD0
+(91 bytes,FNV64 9ceeb57e10d0c85d) and original World/GI manager selection39e6370
+(28 bytes,b05c21d8bd2ad52e). It must witness pending actions on the original
+positive callback weak identity immediately after construction, then freshly
+prove count0 before gear restoration and again before metadata preparation.
+Each poll must qualify original identities/code/manager and bounded readable
+storage before and after the read-only call. No arbitrary delay, forced latent
+processing, UUID-only proof, cached readiness or zero-serial lookup is accepted.
+ABI5 native query, Rust binding and Lua loading stage are implemented; original
+65s startup and250ms receipt bounds remain unchanged. No release claim.
+
+Lua setup/loading focused1214/74 PASS; Rust native_gameplay focused16 PASS.
+Independent Lua stage, root loading integration and Rust binding reviews CLOSED.
+These are offline binding/stage checks, not actual game acceptance. The child
+ModularWeapon continuation2349 has four zero-duration latent steps, including
+BaseMesh.SetSimulatePhysics(false) and restoration of SimulatesPhysics; it has no
+direct destroy/owner/passport/alias writes in that exact continuation. Transitive
+physics callback effects are not proved identity-neutral. The new query proves
+the original pawn's initialization only; all later full gear/RF checks remain,
+and child physics completion/body parity are not claimed. The next actual run
+must demonstrate whether Tick-off plus pawn completion resolves the observed
+remote weapon retirement before further lifecycle changes are selected.
+
+Combined candidate is frozen: strict production provider/native presentation/
+native weapons compilation PASS; native2242/weapons167 focused PASS. ABI5 is88
+bytes with initialized appended at80 and old offsets preserved. Finish freshly
+requires pawn count0 before possession and again before metadata preparation.
+Callback-nested queries refuse before the provider mutex; malformed readable
+storage/hash chains refuse before native traversal. Independent native storage,
+code/callee and lifecycle review CLOSED. Full G0/exact deployment and
+actual game verification remain pending. Root's ignored window operator now
+moves a qualified original client's visible startup console to its secondary
+rectangle separately from Unreal-window qualification. Static syntax/native
+helper compile and independent readback review PASS; actual placement pending.
+
 The next copied provenance diagnostic stores first deterministic original path
 source/row/own/depth when constructing the existing plan. Only an already-failed
 RF predicate reports those values and scalar membership in current gameplay
@@ -10,7 +68,7 @@ native query, pointer output, mask, rebinding or success log. Strict provider
 compile and focused weapons167 PASS; independent review CLOSED. The first new fixture failed because it
 mutated an Outer while reusing an earlier lookup operation; a fresh seeded test
 lookup isolates that scenario and preserves all production witness checks.
-Full G0/exact deployment and actual provenance observation remain pending.
+Its full G0/exact deployment and actual provenance observation are recorded above.
 
 Actuald732bf1f full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
 deployed. Standard184318-07d658 FAILS before LIVE: C1's first warm batch refuses

@@ -3,9 +3,9 @@
 local M={}
 local labels={connecting="Connecting to your match",travel="Loading the arena",waiting="Waiting for the match",
     assets="Loading player assets",present="Creating player models",character="Preparing player characters",equipment="Restoring player equipment",
-    controls="Preparing your controls",check_equipment="Checking player equipment",sync="Synchronizing the latest match state",
+    native_setup="Waiting for native character setup",controls="Preparing your controls",check_equipment="Checking player equipment",sync="Synchronizing the latest match state",
     view="Preparing your view",error="Unable to load the match"}
-local preparation={present=true,character=true,equipment=true,controls=true,check_equipment=true,sync=true}
+local preparation={present=true,character=true,native_setup=true,equipment=true,controls=true,check_equipment=true,sync=true}
 function M.new(env)
     local self={host=nil,stage="connecting",done=nil,total=nil,failed=false,ready=false,retry_at=0,failures=0,
         started_at=env.now(),paint_at=0,force_update=true}
