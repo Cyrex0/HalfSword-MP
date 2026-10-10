@@ -12,12 +12,28 @@ struct GameplayCurrent {
     Obj controller_level{};LookupEntry level_path,get_level_path,local_path;
     HsmpProp level_world{},local{};uint64_t vtable{};
 };
+enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
+struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
+std::atomic<uint32_t> gameplay_current_attempts{};
+struct GameplayCurrentTrace {
+    GameplayCurrentObservation observation;HsmpPresentationCreateLog logger{create_logger.load()};uint32_t attempt{};
+    std::chrono::steady_clock::time_point started{};
+    GameplayCurrentTrace(){if(logger){auto used=gameplay_current_attempts.load();while(used<8){if(gameplay_current_attempts.compare_exchange_weak(used,used+1)){attempt=used+1;started=std::chrono::steady_clock::now();break;}}}}
+    ~GameplayCurrentTrace(){if(!attempt)return;
+        constexpr const char* reasons[]{"unentered","world_qualification","cold_profile_absent","bool_schema","code_fingerprint","vtable","virtual_target","zero_byte","positive_branch","controller_level"};
+        const auto& row=observation;char label[160]{};std::snprintf(label,sizeof(label),"route=%s reason=%s code=%u cold_code=%u found=%u type=%u offset=%d size=%d byte=%u mask=%u",
+            row.complete?(row.hot?"hot":"legacy"):"refused",row.reason<std::size(reasons)?reasons[row.reason]:"refused",row.code,row.cold_code,row.found,row.type,row.schema.offset,row.schema.size,row.schema.bool_offset,row.schema.bool_mask);
+        const auto elapsed=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started).count());
+        logger("gameplay_current",row.complete,elapsed,attempt,row.operations,row.stage,row.reason,label);
+    }
+};
 struct GameplayPawn {
     Obj world{},controller{},pawn{},actor_class{},level{};
     Transform initial{};uint32_t own{},stage{};
     LookupEntry world_path,controller_path,pawn_path;
     HsmpProp level_world{},controller_pawn{},pawn_controller{};
     std::optional<GameplayCurrent> current;
+    GameplayCurrentObservation current_binding;
     std::optional<GameplayApplied> applied;
 };
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
@@ -45,8 +61,10 @@ void gameplay_transform_code(){
     require(pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe->OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&
         pe->OptionalHeader.SizeOfImage>0x34a5990+bytes.size()&&std::memcmp(image+0x34a5990,bytes.data(),bytes.size())==0,"native gameplay original GetTransform code changed");
 }
-bool gameplay_current_code(uintptr_t& base){
+bool gameplay_current_code(uintptr_t& base,uint32_t* detail=nullptr){
+    if(detail)*detail=1;
     const auto* image=reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));if(!image)return false;
+    if(detail)*detail=2;
     const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<=0||dos->e_lfanew>=65536)return false;
     const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
     if(pe->Signature!=IMAGE_NT_SIGNATURE||pe->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64||pe->OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC||pe->OptionalHeader.SizeOfImage<=0x37d50a9)return false;
@@ -54,8 +72,11 @@ bool gameplay_current_code(uintptr_t& base){
     constexpr std::array<uint8_t,73> local_leaf{0x40,0x53,0x48,0x83,0xec,0x20,0x80,0xb9,0xbc,0x06,0x00,0x00,0x00,0x48,0x8b,0xd9,0x75,0x2f,0xe8,0xa9,0x4e,0xcc,0xff,0x83,0xf8,0x01,0x75,0x08,0x32,0xc0,0x48,0x83,0xc4,0x20,0x5b,0xc3,0x83,0xf8,0x03,0x74,0x11,0x85,0xc0,0x74,0x0d,0x0f,0xb6,0x83,0xbc,0x06,0x00,0x00,0x48,0x83,0xc4,0x20,0x5b,0xc3,0xc6,0x83,0xbc,0x06,0x00,0x00,0x01,0xb0,0x01,0x48,0x83,0xc4,0x20,0x5b,0xc3};
     constexpr std::array<uint8_t,67> level_exec{0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x20,0x48,0x8b,0x42,0x20,0x45,0x33,0xc9,0x48,0x85,0xc0,0x49,0x8b,0xf8,0x48,0x8b,0xd9,0x41,0x0f,0x95,0xc1,0x4c,0x03,0xc8,0x4c,0x89,0x4a,0x20,0xe8,0xd6,0xa2,0x27,0x00,0x48,0x8b,0xd0,0x48,0x8b,0xcb,0xe8,0x5b,0x59,0x01,0xfe,0x48,0x8b,0x5c,0x24,0x30,0x48,0x89,0x07,0x48,0x83,0xc4,0x20,0x5f,0xc3};
     constexpr std::array<uint8_t,81> typed_outer{0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x20,0x48,0x8b,0xfa,0x48,0x8b,0xd9,0xe8,0x6b,0x75,0xf8,0xff,0x48,0x8b,0x43,0x20,0x0f,0x1f,0x80,0x00,0x00,0x00,0x00,0x48,0x85,0xc0,0x74,0x21,0x48,0x8b,0x48,0x10,0x4c,0x8d,0x47,0x30,0x49,0x63,0x50,0x08,0x3b,0x51,0x38,0x7f,0x0a,0x48,0x8b,0x49,0x30,0x4c,0x39,0x04,0xd1,0x74,0x06,0x48,0x8b,0x40,0x20,0xeb,0xda,0x48,0x8b,0x5c,0x24,0x30,0x48,0x83,0xc4,0x20,0x5f,0xc3};
-    if(std::memcmp(image+0x355aea0,local_exec.data(),local_exec.size())||std::memcmp(image+0x37d5060,local_leaf.data(),local_leaf.size())||
-        std::memcmp(image+0x34a5200,level_exec.data(),level_exec.size())||std::memcmp(image+0x14bab90,typed_outer.data(),typed_outer.size()))return false;
+    if(detail)*detail=3;if(std::memcmp(image+0x355aea0,local_exec.data(),local_exec.size()))return false;
+    if(detail)*detail=4;if(std::memcmp(image+0x37d5060,local_leaf.data(),local_leaf.size()))return false;
+    if(detail)*detail=5;if(std::memcmp(image+0x34a5200,level_exec.data(),level_exec.size()))return false;
+    if(detail)*detail=6;if(std::memcmp(image+0x14bab90,typed_outer.data(),typed_outer.size()))return false;
+    if(detail)*detail=0;
     base=reinterpret_cast<uintptr_t>(image);return true;
 }
 thread_local const GameplayPawn* gameplay_active{};
@@ -105,22 +126,27 @@ void gameplay_pure(const GameplayPawn& entry){
             "native gameplay original possession changed");
     }
 }
-bool gameplay_current_positive(const GameplayPawn& entry,bool code_supported,uintptr_t base){
-    gameplay_pure(entry);if(!entry.current||!code_supported)return false;const auto& profile=*entry.current;
+bool gameplay_current_positive(const GameplayPawn& entry,bool code_supported,uintptr_t base,GameplayCurrentObservation* observation=nullptr){
+    const auto reason=[observation](uint32_t value){if(observation)observation->reason=value;};
+    reason(GP_CURRENT_WORLD);gameplay_pure(entry);
+    reason(entry.current_binding.reason?entry.current_binding.reason:GP_CURRENT_ABSENT);if(!entry.current)return false;
+    reason(GP_CURRENT_CODE);if(!code_supported)return false;const auto& profile=*entry.current;
+    reason(GP_CURRENT_SCHEMA);
     if(profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return false;
     const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
-    uint64_t table{},target{};std::memcpy(&table,pc,8);if(!table||table!=profile.vtable)return false;
-    std::memcpy(&target,reinterpret_cast<const uint8_t*>(table)+0x7a8,8);if(target!=base+0x37d5060)return false;
+    reason(GP_CURRENT_VTABLE);uint64_t table{},target{};std::memcpy(&table,pc,8);if(!table||table!=profile.vtable)return false;
+    reason(GP_CURRENT_TARGET);std::memcpy(&target,reinterpret_cast<const uint8_t*>(table)+0x7a8,8);if(target!=base+0x37d5060)return false;
     const bool positive=static_cast<const uint8_t*>(pc)[profile.local.offset]!=0;
-    gameplay_pure(entry);
+    reason(GP_CURRENT_WORLD);gameplay_pure(entry);
     if(positive){const auto* final_pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
         uint64_t final_table{},final_target{};std::memcpy(&final_table,final_pc,8);
         require(final_table==profile.vtable,"native gameplay original controller vtable changed");
         std::memcpy(&final_target,reinterpret_cast<const uint8_t*>(final_table)+0x7a8,8);
         require(final_target==base+0x37d5060&&static_cast<const uint8_t*>(final_pc)[profile.local.offset]!=0,"native gameplay local controller changed");}
-    return positive;
+    reason(positive?GP_CURRENT_HOT:GP_CURRENT_ZERO);return positive;
 }
 void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
+    entry.current_binding.reason=GP_CURRENT_LEVEL;
     GameplayCurrent profile;profile.controller_level=returned(entry.controller,L"/Script/Engine.Actor:GetLevel",result);
     require(profile.controller_level.weak&&is(profile.controller_level,L"/Script/Engine.Level"),"native gameplay original controller level unavailable");
     const auto* pc_before=get(entry.controller);const auto* outer=source_outer(pc_before);const auto original_outer=outer?*outer:nullptr;get(entry.controller);
@@ -128,16 +154,19 @@ void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
     profile.level_world=property(profile.controller_level,L"OwningWorld",L"ObjectProperty",8);
     require(profile.level_world.offset==0xc0,"native gameplay controller world schema changed");
     auto* pc=get(entry.controller);const auto found=vt->obj_prop(pc,u16(L"bIsLocalPlayerController"),&profile.local);get(entry.controller);
-    if(found!=1||profile.local.cls!=name(L"BoolProperty")||profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return;
-    uintptr_t image{};if(!gameplay_current_code(image))return;
+    const bool bool_type=found==1&&profile.local.cls==name(L"BoolProperty");
+    entry.current_binding.found=found==1?1u:0u;entry.current_binding.schema=profile.local;
+    entry.current_binding.type=bool_type?1u:0u;entry.current_binding.reason=GP_CURRENT_SCHEMA;
+    if(!bool_type||profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return;
+    entry.current_binding.reason=GP_CURRENT_CODE;uintptr_t image{};if(!gameplay_current_code(image,&entry.current_binding.code))return;
     std::memcpy(&profile.vtable,pc,8);
     const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
-    if(profile.vtable<image||profile.vtable-image>pe->OptionalHeader.SizeOfImage-0x7b0)return;
-    uint64_t target{};std::memcpy(&target,reinterpret_cast<const uint8_t*>(profile.vtable)+0x7a8,8);if(target!=image+0x37d5060)return;
+    entry.current_binding.reason=GP_CURRENT_VTABLE;if(profile.vtable<image||profile.vtable-image>pe->OptionalHeader.SizeOfImage-0x7b0)return;
+    entry.current_binding.reason=GP_CURRENT_TARGET;uint64_t target{};std::memcpy(&target,reinterpret_cast<const uint8_t*>(profile.vtable)+0x7a8,8);if(target!=image+0x37d5060)return;
     Function level_api(L"/Script/Engine.Actor:GetLevel");level_api.field(L"ReturnValue",L"ObjectProperty",8);
     Function local_api(L"/Script/Engine.Controller:IsLocalController");local_api.field(L"ReturnValue",L"BoolProperty",1);
     profile.level_path=gameplay_path(profile.controller_level);profile.get_level_path=gameplay_path(level_api.function);profile.local_path=gameplay_path(local_api.function);
-    entry.current=std::move(profile);gameplay_pure(entry);
+    entry.current=std::move(profile);gameplay_pure(entry);entry.current_binding.reason=GP_CURRENT_HOT;
 }
 void gameplay_call_guard(){
     if(!gameplay_active)return;
@@ -190,14 +219,17 @@ int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Tr
         return -1;}
 }
 int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
+    GameplayCurrentTrace trace;
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
+        trace.observation=entry.current_binding;trace.observation.cold_code=entry.current_binding.code;trace.observation.stage=entry.stage;trace.observation.reason=GP_CURRENT_WORLD;
         require(pawn!=nullptr,"native gameplay pawn output missing");uintptr_t image{};
-        const bool code_supported=gameplay_current_code(image);const bool hot=gameplay_current_positive(entry,code_supported,image);
+        uint32_t code{};const bool code_supported=gameplay_current_code(image,&code);trace.observation.code=code;
+        const bool hot=gameplay_current_positive(entry,code_supported,image,&trace.observation);trace.observation.hot=hot;
         if(!hot)gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);
-        if(hot){uintptr_t final_image{};const bool final_code=gameplay_current_code(final_image);require(gameplay_current_positive(entry,final_code,final_image),"native gameplay local controller changed");}
-        *pawn=entry.pawn;result->complete=1;return 1;
-    }catch(const std::exception& error){failure(result,error.what());return -1;}
+        if(hot){uintptr_t final_image{};const bool final_code=gameplay_current_code(final_image,&trace.observation.code);require(gameplay_current_positive(entry,final_code,final_image,&trace.observation),"native gameplay local controller changed");}
+        *pawn=entry.pawn;result->complete=1;trace.observation.complete=1;trace.observation.operations=result->operations;return 1;
+    }catch(const std::exception& error){failure(result,error.what());if(result)trace.observation.operations=result->operations;return -1;}
 }
 int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);

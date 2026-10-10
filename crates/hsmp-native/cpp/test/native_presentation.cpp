@@ -1406,6 +1406,14 @@ void gameplay_readback_checks(){
         "gameplay failure fits the fixed result buffer with exact extreme doubles and complete ten-channel mask");
     check(profile_ffi_calls==calls,"gameplay copied readback diagnostics make no native or logger callback");
 }
+struct GameplayCurrentRecord {uint32_t attempt{},complete{},operations{},stage{},reason{};std::string label;};
+std::vector<GameplayCurrentRecord> gameplay_current_records;bool gameplay_current_log_outside{};
+void record_gameplay_current(const char* stage,uint32_t complete,uint64_t,uint32_t attempt,uint32_t operations,uint32_t pawn_stage,uint32_t reason,const char* label){
+    bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
+    gameplay_current_log_outside=gameplay_current_log_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active;
+    check(std::strcmp(stage,"gameplay_current")==0,"current diagnostic uses its distinct fixed tag");
+    gameplay_current_records.push_back({attempt,complete,operations,pawn_stage,reason,label});
+}
 void gameplay_current_checks(HsmpReflect& reflect){
     lookup_reset(reflect);std::array<uint64_t,0x7b0/8> table{};constexpr uintptr_t base=0x140000000;
     struct ControllerFixture {LifetimeObject identity;std::array<uint8_t,0x700-sizeof(LifetimeObject)> storage{};};
@@ -1415,7 +1423,7 @@ void gameplay_current_checks(HsmpReflect& reflect){
     foreign_owner.outer=&level;level.outer=&path_package;get_level_fn.outer=&actor_class;owner_fn.outer=&actor_class;
     actor_class.outer=&path_package;old_world.outer=&path_package;
     auto* local=reinterpret_cast<uint8_t*>(&memory)+0x6bc;*local=1;
-    GameplayPawn entry;entry.world=keep(&old_world);entry.controller=keep(controller);entry.pawn=keep(&foreign_owner);
+    HsmpProp reported_schema{};GameplayPawn entry;entry.world=keep(&old_world);entry.controller=keep(controller);entry.pawn=keep(&foreign_owner);
     entry.actor_class=keep(&actor_class);entry.level=keep(&level);entry.stage=1;
     entry.level_world=object_field(L"OwningWorld",static_cast<int32_t>(offsetof(LifetimeObject,property)));
     {int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,entry.world);
@@ -1426,12 +1434,16 @@ void gameplay_current_checks(HsmpReflect& reflect){
     GameplayCurrent profile;profile.controller_level=entry.level;profile.level_world=entry.level_world;profile.level_path=gameplay_path(entry.level);
     profile.get_level_path=gameplay_path(keep(&get_level_fn));profile.local_path=gameplay_path(keep(&owner_fn));
     profile.local.offset=0x6bc;profile.local.size=1;profile.local.bool_mask=0xff;profile.vtable=reinterpret_cast<uint64_t>(table.data());entry.current=profile;
-    check(gameplay_current_positive(entry,true,base)&&level_calls==0,"qualified positive current branch uses fresh world/level/local facts without native PE");
-    *local=0;check(!gameplay_current_positive(entry,true,base),"zero local byte selects original native fallback rather than cached positive result");
+    reported_schema=profile.local;
+    GameplayCurrentObservation observed;
+    check(gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_HOT&&level_calls==0,"qualified positive current branch reports its actual choice without native PE");
+    *local=0;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_ZERO,"zero local byte reports native fallback rather than cached positive result");
     *local=2;check(gameplay_current_positive(entry,true,base),"full native bool byte positive branch preserves non-one true values");
-    check(!gameplay_current_positive(entry,false,base),"unsupported native code selects unchanged legacy admission");
-    table[0x7a8/8]++;check(!gameplay_current_positive(entry,true,base),"unsupported current virtual target selects native fallback");table[0x7a8/8]--;
-    entry.current->local.bool_mask=1;check(!gameplay_current_positive(entry,true,base),"nonmatching native bool layout selects legacy admission");entry.current->local.bool_mask=0xff;
+    check(!gameplay_current_positive(entry,false,base,&observed)&&observed.reason==GP_CURRENT_CODE,"unsupported native code reports unchanged legacy admission");
+    table[0x7a8/8]++;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_TARGET,"unsupported current virtual target reports native fallback");table[0x7a8/8]--;
+    entry.current->local.bool_mask=1;check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_SCHEMA,"nonmatching native bool layout reports legacy admission");entry.current->local.bool_mask=0xff;
+    entry.current_binding.reason=GP_CURRENT_SCHEMA;auto bound=std::move(entry.current);entry.current.reset();
+    check(!gameplay_current_positive(entry,true,base,&observed)&&observed.reason==GP_CURRENT_SCHEMA,"cold profile absence preserves the original failed Bool schema stage");entry.current=std::move(bound);
     level.property=&new_world;rejects([&]{gameplay_current_positive(entry,true,base);},"fresh original level world change refuses hot current");level.property=&old_world;
     controller->outer=&foreign_level;rejects([&]{gameplay_current_positive(entry,true,base);},"controller original hard level link cannot be rebound by hot current");controller->outer=&level;
     controller->flags=0x40000000;rejects([&]{gameplay_current_positive(entry,true,base);},"original controller garbage refuses before local byte access");controller->flags=0;
@@ -1440,6 +1452,24 @@ void gameplay_current_checks(HsmpReflect& reflect){
     foreign_owner.alive=false;rejects([&]{gameplay_current_positive(entry,true,base);},"original pawn expiration refuses even with positive local controller");foreign_owner.alive=true;
     check(gameplay_current_positive(entry,true,base)&&level_calls==0,"next invocation repeats original qualification without native PE or validation ticket");
     }
+    gameplay_current_attempts.store(0);hsmp_presentation_set_create_log(nullptr);
+    {GameplayCurrentTrace disabled;check(disabled.attempt==0&&gameplay_current_attempts.load()==0,"disabled current reporter consumes no bounded attempt");}
+    gameplay_current_records.clear();gameplay_current_log_outside=true;hsmp_presentation_set_create_log(record_gameplay_current);
+    for(uint32_t i=0;i<10;++i){GameplayCurrentTrace trace;const std::lock_guard lock(gameplay_mutex);
+        int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,entry.world);GameplayWatch watch(entry);
+        trace.observation.schema=reported_schema;trace.observation.found=trace.observation.type=1;trace.observation.stage=1;
+        trace.observation.complete=i==0?0u:1u;trace.observation.hot=i%2==0;trace.observation.operations=i%2==0?0u:3u;
+        trace.observation.reason=i==0?GP_CURRENT_WORLD:i%2==0?GP_CURRENT_HOT:GP_CURRENT_SCHEMA;
+    }
+    check(gameplay_current_records.size()==8&&gameplay_current_attempts.load()==8,"current reporter emits at most first eight calls including failures");
+    check(gameplay_current_log_outside,"current copied reporter runs only after operation guard/cache/watch and gameplay mutex unwind");
+    check(gameplay_current_records[0].label.find("route=refused reason=world_qualification")!=std::string::npos&&
+        gameplay_current_records[1].label.find("route=legacy reason=bool_schema")!=std::string::npos&&
+        gameplay_current_records[2].label.find("route=hot reason=positive_branch")!=std::string::npos,
+        "copied report distinguishes actual success route and refusal without object queries");
+    check(gameplay_current_records[1].operations==3&&gameplay_current_records[2].operations==0&&
+        gameplay_current_records[1].label.find("offset=1724 size=1 byte=0 mask=255")!=std::string::npos,"current diagnostic preserves existing PE count and original schema scalars");
+    hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
 }

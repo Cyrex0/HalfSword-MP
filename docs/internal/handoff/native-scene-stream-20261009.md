@@ -2,6 +2,24 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actualefc4cc7b fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
+standardGameplay060336-67688f client1 nativeapply24511→24518ms succeeds; final
+gear then stale25310ms, postapply792ms. No measured benefit vsprior client2
+752ms (separate runs, not normalized). Hot current branch was not instrumented;
+do not claim it was used. Client2 later guard refusal secondary. No ready/input0.
+Early original windows secondaryPASS; selected windows exit before Skycapture.
+CleanupPASS/four absent/save20/nodumps. Evidence native_operator_summary.
+Next FIRST capture bounded current branch/coldprofile/code/schema/vslot/byte
+selection and existing provider call counts; copied diagnostics after scope only,
+no new speculative optimization or expiry/guard change until actual selection.
+Bounded current diagnostic frozen: first8 provider.current calls only, copied
+hot/legacy/refused decision, cold-bind reason, Bool found/type/offset/size/byte/mask,
+current/cold code details, existing PE operations and total_us. Reporter declared
+before mutex and logs after scope/watch/mutex unwind; no UObject read at report.
+Original Bool type lookup reused once; fixture parent-lifetime schema copy fixed.
+Strict production/fixture compile PASS1800; independent review CLOSED. Acceptance,
+query order/ABI/Rust/250ms unchanged. FullG0/deploy then actual selection evidence.
+
 Actual5510caf3 fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
 standardGameplay054322-04a9e1 client2 nativeapply succeeds23215→23221ms; full
 gear then original result stale at23973ms, postapply752ms. Separate priorrun
