@@ -33,7 +33,7 @@ local function identity(scene)
 end
 function M.new(env)
     local N,Passport=env.native,env.passport
-    local self={key=nil,token=nil,rows={},cursor=1,ready=false}
+    local self={key=nil,token=nil,rows={},cursor=1,ready=false,timing_reports=0,timing_failure=false}
     local function require_api(name)
         if type(N[name])~="function"then fail("native gameplay API unavailable: "..name)end;return N[name]
     end
@@ -138,6 +138,16 @@ function M.new(env)
         if self.key and type(scene)=="table" and scene.generation~=self.key then self:clear()end
     end
     function self:apply(scene)
+        local trace,started,phase_started,row_started,apply_returned
+        local function clock()
+            if type(env.now_us)~="function"then return nil end
+            local ok,value=pcall(env.now_us)
+            if ok and math.type(value)=="integer"and value>=0 then return value end
+        end
+        local function phase(stage)
+            if not trace then return end;local tick=clock();if not tick then trace=nil;return end
+            trace[trace.stage.."_us"]=tick-phase_started;trace.stage=stage;phase_started=tick;return tick
+        end
         local ok,result,reason=pcall(function()
             local key,own=identity(scene)
             local world,token,pc=env.world()
@@ -181,6 +191,12 @@ function M.new(env)
                 end
                 return nil,PENDING
             end
+            if scene.state==2 and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
+                started=clock();if started then
+                    phase_started=started;trace={epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,authority_tick=scene.authority_tick,
+                        received_age_entry_ms=scene.received_age_ms,stage="movement",rows={}}
+                end
+            end
             -- Replay only source-acknowledged movement/Run through the cooked
             -- pawn's actual input events, before authoritative reconciliation.
             for index,original in ipairs(self.rows)do
@@ -207,18 +223,39 @@ function M.new(env)
                     original.run=run
                 end
             end
+            phase("native_apply")
             local applied,actual=guarded(require_api("native_gameplay_apply"),scene)
             if applied~=true then return nil,actual end
             if type(actual)~="table" or actual.generation~=self.key or actual.gameplay_proof~=true then fail("native gameplay complete native proof unavailable")end
-            for _,original in ipairs(self.rows)do
+            apply_returned=phase("gear")
+            if trace then trace.applied_received_age_ms=actual.received_age_ms;trace.applied_authority_tick=actual.authority_tick;trace.applied_frame_seq=actual.frame_seq end
+            for index,original in ipairs(self.rows)do
+                if trace then row_started=clock();if not row_started then trace=nil else
+                    trace.active_row=index;trace.rows[index]={id=original.id,incarnation=original.incarnation,us=0}
+                end end
                 local verified,why=Passport.verify_equipment(original.recipe,passport_env(original))
                 if verified~=true then fail(why or"native gameplay complete equipment readback failed")end
+                if trace then local tick=clock();if not tick then trace=nil else trace.rows[index].us=tick-row_started;trace.active_row=nil end end
             end
+            local confirming=phase("confirm")
+            if trace and confirming and apply_returned then trace.elapsed_apply_return_to_confirm_us=confirming-apply_returned end
             local confirmed,final=guarded(require_api("native_gameplay_confirm"),actual)
             if confirmed~=true then return nil,final end
             if type(final)~="table"or final.generation~=self.key or final.gameplay_proof~=true then fail("native gameplay final native proof unavailable")end
             self.ready=true;return true,final
         end)
+        if trace then
+            local tick=clock();if tick then
+                trace[trace.stage.."_us"]=tick-phase_started;trace.total_us=tick-started
+                if trace.active_row then trace.rows[trace.active_row].us=tick-row_started;trace.active_row=nil end
+                trace.ok=ok and result==true;trace.reason=(not ok and tostring(result)or type(reason)=="string"and reason or""):sub(1,256)
+                if self.timing_reports<8 or(not trace.ok and not self.timing_failure)then
+                    if self.timing_reports<8 then self.timing_reports=self.timing_reports+1 end
+                    if not trace.ok then self.timing_failure=true end
+                    pcall(env.diagnostic,trace)
+                end
+            end
+        end
         if not ok then self.ready=false;return nil,tostring(result)end
         return result,reason
     end

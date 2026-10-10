@@ -2,6 +2,36 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual d26c85b8 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
+standard Gameplay062332-00cfc3 BOTH MirrorReady then LIVE. First8 current calls
+per original client all hot/positive_branch/PE0,32–95us, actual ByteMask1. This
+proves the cold-route correction; these bounded stage1 samples do not measure
+later current calls. Client1 apply22728→22744ms then ready22897; client2
+apply22624→22642 then ready22793. Complete final gear/confirm passed at original
+receipt ages170.107/217.102ms. Actual source active native dispatch by original
+controllers206/219, with source-ACKed requests and delivered frames on both.
+The observation gate still FAILS: client2 stale at27811ms, frame179/request13/
+delivery18. Logged60.4295ms is the outer pre-apply scene snapshot, not the final
+original applied receipt age. Next measure this first failing live iteration's
+apply/gear/confirm costs and receipt age; no tolerance/receipt renewal/proof cuts.
+Codec8 actual authority3080raw→1506wire/24us encode; client3080→1516/8us decode
+(different eight-packet samples). Lossless application-envelope bytes roughly
+51% smaller; UDP/auth excluded, no100-player capacity or full gameplay claim.
+Early original windows secondaryPASS. No pixels captured on this run. Independent
+cleanupPASS/four absent/save20 unchanged/no dumps/no unobserved children. Evidence
+native_operator_summary.json. Readiness/input is a meaningful narrow milestone;
+combat/body/all-gear/widget/co-op/release parity remains unverified.
+Bounded LIVE timing checkpoint: original applied receipt/tick copied separately
+from movement/apply/fullgear-per-row/confirm elapsed costs. Existing QPC clock
+only; first8 plus first later failure, maximum9 reports, after protected proof or
+refusal. No UObject diagnostic reads or receipt/readiness/proof changes. Narrow
+review CLOSED; existing focused Lua gameplay suite367 assertions PASS. FullG0
+and exact deployed actual first-failure timing run pending.
+First push checkpoint refused the unregistered timing emitter in both event lint
+and the existing contract test. Register diagnostic fields with empty gate-read
+requirements; no scenario acceptance rules change. Initial unpublished9de572fa
+is amended before rerunning fullG0; other completed checks passed.
+
 Actual21d43cac fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
 standardGameplay061606-628efb first8 BOTH current calls legacy/PE3/bool_schema,
 found1/type1/offset1724(6BC)/size1/byte0/mask1. Actual source adapter

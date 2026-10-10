@@ -3,7 +3,7 @@ local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
-    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0}
+    local f={world="w1",calls={},actions={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0,clock=0,timings={}}
     local cls={GetAddress=function()return 100 end}
     local function pawn(id)
         local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
@@ -11,14 +11,14 @@ local function fixture()
             "InpActEvt_Run_K2Node_InputActionEvent_4","InpActEvt_Run_K2Node_InputActionEvent_5"})do
             p[name]=setmetatable({type=function()return"UFunction"end,IsValid=function()return true end,
                 GetFullName=function()return"Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..name end},
-                {__call=function(_,self,value)check(self==p,"accepted native action targets exact original pawn");f.actions[#f.actions+1]={id=id,name=name,value=value}end})
+                {__call=function(_,self,value)check(self==p,"accepted native action targets exact original pawn");f.actions[#f.actions+1]={id=id,name=name,value=value};f.clock=f.clock+2 end})
         end
         return p
     end
     f.pawns={pawn(1),pawn(2)}
     local function recipe(id)return{schema=1,actor_class="/Game/Character/Blueprints/Willie_BP.Willie_BP_C",team=id,
         passport={fixture_id=id},construction={},equipment={}}end
-    f.scene={epoch=-7,dir_seq=8,generation="g8",peer_id=9,state=1,fresh=true,frame_seq=40,
+    f.scene={epoch=-7,dir_seq=8,generation="g8",peer_id=9,state=1,fresh=true,frame_seq=40,authority_tick=40,received_age_ms=4,
         entities={{epoch=-7,id=1,incarnation=2,revision=3,owner_peer=9,kind=0,recipe=recipe(1),buttons=1,axes={0.25,-0.5,0,0,0,0,0,0}},
             {epoch=-7,id=2,incarnation=4,revision=5,owner_peer=10,kind=0,recipe=recipe(2),buttons=0,axes={0,0,0,0,0,0,0,0}}}}
     local N={}
@@ -38,9 +38,9 @@ local function fixture()
     end
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
     N.native_gameplay_finish=function(handle)f.calls[#f.calls+1]="possess"..handle;return true end
-    N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";return true,scene end
+    N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";f.clock=f.clock+20;return true,f.applied_scene or scene end
     N.native_gameplay_confirm=function(scene)
-        f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";if f.confirm_error then return nil,f.confirm_error end;return true,scene
+        f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";f.clock=f.clock+30;if f.confirm_error then return nil,f.confirm_error end;return true,scene
     end
     N.native_gameplay_clear=function(forget)f.clears=f.clears+1;if forget then f.forgot=f.forgot+1 end;return true end
     local Passport={before_finish=function(recipe,env)
@@ -56,16 +56,52 @@ local function fixture()
         if f.weapon_error then return nil,f.weapon_error end;return true
     end,verify_equipment=function(recipe,env)
         f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
+        f.clock=f.clock+100
         f.calls[#f.calls+1]="gear"..recipe.passport.fixture_id
         if f.gear_error then return nil,f.gear_error end;return true
     end}
     f.game=Gameplay.new({native=N,passport=Passport,same=function(token)return token==f.world end,
+        now_us=function()if f.clock_error then error("diagnostic clock unavailable")end;return f.clock end,
+        diagnostic=function(row)
+            check(f.calls[#f.calls]=="confirm"or not row.ok,"timing emitted only after native proof or original refusal")
+            f.timings[#f.timings+1]=row;if f.log_error then error("diagnostic sink refused")end
+        end,
         world=function()return{GetAddress=function()return 88 end},f.world,{GetAddress=function()return 77 end}end,
         world_address=function()return 88 end,progress=function()end,fname=function(name)return name end})
     function f:bootstrap()
         for _=1,12 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
     end
     return f
+end
+do
+    local f=fixture();f:bootstrap();check(#f.timings==0,"bootstrap and READY work do not emit per-LIVE timing")
+    f.scene.state=2;f.scene.gameplay_proof=true;f.applied_scene={}
+    for key,value in pairs(f.scene)do f.applied_scene[key]=value end;f.applied_scene.received_age_ms=17
+    local ok,actual=f.game:apply(f.scene);local row=f.timings[1]
+    check(ok==true and actual==f.applied_scene and row.epoch==-7 and row.frame_seq==40 and row.authority_tick==40,
+        "timing preserves original signed epoch and integer result provenance")
+    check(row.received_age_entry_ms==4 and row.applied_received_age_ms==17 and row.applied_authority_tick==40 and
+        row.elapsed_apply_return_to_confirm_us==200,"timing separates exact native returned original receipt age from elapsed gear time")
+    check(row.native_apply_us==20 and row.gear_us==200 and row.confirm_us==30 and row.movement_us==12 and row.total_us==262 and
+        row.rows[1].id==1 and row.rows[1].incarnation==2 and row.rows[1].us==100 and row.rows[2].id==2 and row.rows[2].us==100,
+        "timing attributes every full original gear row and native stage without changing proof execution")
+    for _=1,11 do f.game:apply(f.scene)end
+    check(#f.timings==8,"successful per-LIVE timing has a fixed first-eight emission bound")
+    f.confirm_error="native gameplay result is stale";local success,reason=f.game:apply(f.scene)
+    check(success==nil and reason==f.confirm_error and #f.timings==9 and f.timings[9].stage=="confirm" and not f.timings[9].ok and
+        f.timings[9].applied_received_age_ms==17,"first later refusal records its failing edge while preserving original stale reason and receipt")
+    f.game:apply(f.scene);check(#f.timings==9,"later refusal retries cannot exceed the timing budget")
+end
+do
+    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.gear_error="original gear changed"
+    local ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.gear_error and f.timings[1].stage=="gear" and f.timings[1].rows[1].us==100 and f.confirmed==0,
+        "failed gear row timing remains copied and prevents premature confirmation")
+end
+for _,fault in ipairs({"clock_error","log_error"})do
+    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f[fault]=true
+    local ok,actual=f.game:apply(f.scene)
+    check(ok==true and actual==f.scene and f.confirmed==1,"optional diagnostic failure never changes native readiness or original result")
 end
 do
     local f=fixture();f:bootstrap()

@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Record bounded native gameplay timings after verification to identify live
+  freshness failures without changing gear checks or receipt expiry.
 - Add negotiated lossless LZ4 blocks for native scene bootstrap and compact
   gameplay results, retaining raw packets when compression does not save space.
 - Add ordered native movement requests and staged Willie pawn construction from
