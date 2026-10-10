@@ -357,16 +357,41 @@ void weapon_convert(const WeaponRosterSnapshot& roster,const WeaponActor& a,Hsmp
     original();const WeaponName8 copied=a.values.name;std::wstring converted;weapon_api.name_text(&copied,&converted);original();weapon_text(out.name,converted,128);
     out.id=a.values.id;std::memcpy(out.materials,a.values.materials.data(),4);out.tier=a.values.tier;std::memcpy(out.sizes,a.values.sizes.data(),96);std::memcpy(out.mass,a.values.mass.data(),32);out.price=a.values.price;std::memcpy(out.colors,a.values.colors.data(),32);
 }
+thread_local uint32_t weapon_batch_attempts{};
+thread_local bool weapon_batch_timing_active{};
+struct WeaponBatchTrace {
+    bool enabled{},complete{};uint32_t attempt{},phase{};std::array<uint64_t,5> nanoseconds{};
+    std::chrono::steady_clock::time_point started{},last{};
+    WeaponBatchTrace(){
+        if(weapon_batch_timing_active||active_lookup||active_guard||weapon_active_roster||weapon_batch_attempts>=8||!create_logger.load())return;
+        enabled=true;weapon_batch_timing_active=true;attempt=++weapon_batch_attempts;started=last=std::chrono::steady_clock::now();
+    }
+    void advance(uint32_t next){if(!enabled)return;const auto now=std::chrono::steady_clock::now();
+        nanoseconds[phase]+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now-last).count());phase=next;last=now;}
+    ~WeaponBatchTrace(){
+        if(!enabled)return;const auto now=std::chrono::steady_clock::now();
+        nanoseconds[phase]+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now-last).count());weapon_batch_timing_active=false;
+        // Declared before the lock: no live operation/TLS/mutex reaches logger.
+        if(const auto logger=create_logger.load()){
+            constexpr const char* labels[]{"schema_admission_inclusive","aliases","actors","conversion","final"};
+            for(uint32_t i=0;i<5;++i)logger("gameplay_weapons_us",complete?1u:2u,nanoseconds[i]/1000,attempt,i,0,0,labels[i]);
+            const auto total=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now-started).count());
+            logger("gameplay_weapons_us",complete?1u:2u,total,attempt,5,0,0,"instrumented_total_inclusive");
+        }
+    }
+};
 int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGuard* guard,uint32_t* aliases,HsmpGameplayWeaponPassport* output,uint32_t capacity,uint32_t* written,HsmpViewResult* result){
+    WeaponBatchTrace timing;
     const std::lock_guard lock(gameplay_mutex);gameplay_weapon_snapshot.reset();if(written)*written=0;
     try{initialize_result(result);thread();require(handles&&aliases&&written&&count>0&&count<=32&&count==gameplay_pawns.size()&&capacity<=count*7&&(!capacity||output),"native weapon caller storage/roster bound");
-        auto& first=gameplay_entry(handles[0]);OperationScope operation(guard,first.world);GameplayWatch watch(first);if(!weapon_api.module)weapon_api=weapon_load_api();weapon_api_ok();weapon_prewarm();
+        auto& first=gameplay_entry(handles[0]);OperationScope operation(guard,first.world);GameplayBoundaryScope boundary(first);GameplayWatch watch(first);if(!weapon_api.module)weapon_api=weapon_load_api();weapon_api_ok();weapon_prewarm();
         auto snapshot=std::make_shared<WeaponRosterSnapshot>();
         constexpr WeaponFieldSpec vector_specs[]{{L"X",WeaponKind::Double,0,8,8,nullptr},{L"Y",WeaponKind::Double,8,8,8,nullptr},{L"Z",WeaponKind::Double,16,8,8,nullptr}};
         constexpr WeaponFieldSpec color_specs[]{{L"R",WeaponKind::Float,0,4,4,nullptr},{L"G",WeaponKind::Float,4,4,4,nullptr},{L"B",WeaponKind::Float,8,4,4,nullptr},{L"A",WeaponKind::Float,12,4,4,nullptr}};
         snapshot->schema=weapon_schema_bind(find(weapon_struct_path),weapon_fields,std::size(weapon_fields),"WeaponPassport",0xf9,0x100,8);
         snapshot->vector=weapon_schema_bind(find(L"/Script/CoreUObject.Vector"),vector_specs,std::size(vector_specs),"Vector",24,24,8);
         snapshot->color=weapon_schema_bind(find(L"/Script/CoreUObject.LinearColor"),color_specs,std::size(color_specs),"LinearColor",16,16,4);
+        timing.advance(1);
         snapshot->pawns.reserve(count);uint32_t own{};
         for(uint32_t index=0;index<count;++index){require(std::find(handles,handles+index,handles[index])==handles+index,"native weapon duplicate gameplay handle");const auto& entry=gameplay_entry(handles[index]);
             require(entry.stage==3&&entry.applied&&same(entry.world,first.world)&&same(entry.controller,first.controller),"native weapon original applied roster changed");own+=entry.own;
@@ -374,6 +399,7 @@ int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGu
             for(size_t i=0;i<7;++i)row.properties[i]=weapon_property_bind(row.pawn,weapon_alias_names[i],WeaponKind::Object,weapon_alias_offsets[i],8,weapon_actor_path);
             auto* native=get(row.pawn);for(size_t i=0;i<7;++i)std::memcpy(&row.addresses[i],static_cast<const uint8_t*>(native)+row.properties[i].field.offset,8);snapshot->pawns.push_back(std::move(row));}
         require(own==1,"native weapon owned roster ambiguous");snapshot->actors.reserve(count*7);snapshot->output.reserve(count*7);
+        timing.advance(2);
         // Capture every original actor weak/path/RF before any weapon callback.
         // The same pure block qualifies the original complete alias census first.
         check_guard();{WeaponWatch originals(*snapshot);gameplay_weapons_guard();
@@ -386,10 +412,12 @@ int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGu
         for(size_t i=0;i<snapshot->actors.size();++i){const auto original=snapshot->actors[i].path;const auto actor=snapshot->actors[i].actor;auto fresh=weapon_actor_bind(actor,snapshot->pawns[snapshot->output[i].pawn_index].world,snapshot->schema,result);
             require(gameplay_path_equal(original,fresh.path),"native weapon original cold actor witness changed");snapshot->actors[i]=std::move(fresh);}
         weapon_output_capacity(count,snapshot->output.size(),capacity,output);check_guard();weapon_roster_final(*snapshot);
+        timing.advance(3);
         for(size_t i=0;i<snapshot->actors.size();++i)weapon_convert(*snapshot,snapshot->actors[i],snapshot->output[i]);
+        timing.advance(4);
         check_guard();lookup_finish();weapon_roster_final(*snapshot);
         // No callbacks or native queries after final full-set closure.
         for(size_t i=0;i<snapshot->pawns.size();++i)std::copy(snapshot->pawns[i].aliases.begin(),snapshot->pawns[i].aliases.end(),aliases+i*7);
-        if(!snapshot->output.empty())std::copy(snapshot->output.begin(),snapshot->output.end(),output);*written=static_cast<uint32_t>(snapshot->output.size());gameplay_weapon_snapshot=std::move(snapshot);result->complete=1;return 1;
+        if(!snapshot->output.empty())std::copy(snapshot->output.begin(),snapshot->output.end(),output);*written=static_cast<uint32_t>(snapshot->output.size());gameplay_weapon_snapshot=std::move(snapshot);result->complete=1;timing.complete=true;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }

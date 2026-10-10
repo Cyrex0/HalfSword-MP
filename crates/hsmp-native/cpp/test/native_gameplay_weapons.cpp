@@ -166,6 +166,30 @@ void cold_path_cases(){
     owner.alignment=16;rejects([&](){weapon_schema_final(schema);},"later native minimum alignment mutation refuses even when padded extent agrees");owner.alignment=8;
     cold_poisoned_field=nullptr;active_lookup=nullptr;vt=nullptr;object_name=nullptr;retirement_flags=nullptr;source_outer=nullptr;source_package_name=nullptr;weapon_api={};identities.clear();cold_objects.clear();
 }
+struct TimingRow {uint32_t complete{},attempt{},phase{};uint64_t us{};std::string label;};
+std::vector<TimingRow> weapon_timing_rows;bool weapon_timing_unsafe{};
+void weapon_timing_log(const char* stage,uint32_t edge,uint64_t us,uint32_t attempt,uint32_t phase,uint32_t kind,uint32_t id,const char* label){
+    if(std::strcmp(stage,"gameplay_weapons_us")!=0||kind||id||active_lookup||active_guard||weapon_active_roster||gameplay_boundary||weapon_batch_timing_active)weapon_timing_unsafe=true;
+    if(gameplay_mutex.try_lock())gameplay_mutex.unlock();else weapon_timing_unsafe=true;
+    weapon_timing_rows.push_back({edge,attempt,phase,us,label});
 }
-int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
+void timing_cases(){
+    const auto previous=create_logger.load();create_logger.store(weapon_timing_log);weapon_batch_attempts=0;weapon_batch_timing_active=false;weapon_timing_rows.clear();weapon_timing_unsafe=false;
+    try{WeaponBatchTrace failed;const std::lock_guard lock(gameplay_mutex);failed.advance(2);throw Error("fixture batch failure");}catch(const Error&){}
+    check(!weapon_batch_timing_active&&weapon_timing_rows.size()==6&&!weapon_timing_unsafe,"failed batch timing flushes once after mutex and TLS unwind");
+    check(weapon_timing_rows[0].complete==2&&weapon_timing_rows[2].attempt==1&&weapon_timing_rows[2].phase==2,"failed profile retains original stage and explicit error edge");
+    for(uint32_t attempt=2;attempt<=8;++attempt){WeaponBatchTrace outer;const std::lock_guard lock(gameplay_mutex);
+        {WeaponBatchTrace nested;check(!nested.enabled,"nested batch excluded from sample budget");}
+        for(uint32_t phase=1;phase<5;++phase)outer.advance(phase);outer.complete=true;
+    }
+    check(weapon_batch_attempts==8&&weapon_timing_rows.size()==48&&!weapon_timing_unsafe,"eight batch profiles emit at most48 fixed copied rows");
+    check(weapon_timing_rows[47].complete==1&&weapon_timing_rows[47].phase==5&&weapon_timing_rows[47].label=="instrumented_total_inclusive","successful copied total is explicitly inclusive");
+    {WeaponBatchTrace exhausted;check(!exhausted.enabled,"later batches have no profile clock or output");}
+    const auto emitted=weapon_timing_rows.size();weapon_batch_attempts=0;LookupState unrelated;active_lookup=&unrelated;
+    {WeaponBatchTrace nested_scope;check(!nested_scope.enabled&&weapon_batch_attempts==0,"unrelated native operation does not borrow profile or consume budget");}active_lookup=nullptr;
+    create_logger.store(nullptr);{WeaponBatchTrace disabled;check(!disabled.enabled&&weapon_batch_attempts==0,"missing logger has negligible disabled path");}
+    check(weapon_timing_rows.size()==emitted,"excluded/disabled batches emit no rows");create_logger.store(previous);weapon_batch_attempts=0;weapon_batch_timing_active=false;
+}
+}
+int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
     std::cout<<"native_gameplay_weapons: "<<checks<<" checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<"native_gameplay_weapons: "<<e.what()<<'\n';return 1;}}

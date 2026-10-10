@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Use the existing gameplay validation scope for complete weapon readback and
+  record bounded batch-stage timings to diagnose startup freshness failures.
 - Distinguish the weapon passport's native raw property size from its padded
   storage extent, retaining exact layout checks and reporting mismatched values.
 - Report the original cause of staged gameplay guard failures without changing

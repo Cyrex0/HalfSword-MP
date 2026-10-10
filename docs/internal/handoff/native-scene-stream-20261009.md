@@ -2,6 +2,29 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Next candidate adds the existing immutable-config GameplayBoundaryScope to the
+weapon batch, keeping all fresh two-pass original roster/metadata/link checks
+and the complete weapon closure. No admission/result cache or receipt change.
+First8 batches report at most48 copied scalar NATIVE_CREATE rows with
+stage=gameplay_weapons_us: phase0 schema/admission inclusive,1aliases,2actors,
+3conversion,4final,5instrumented total inclusive. Clocks only at phase edges;
+reporting after operation/TLS/mutex unwind, no expensive caller probe. Strict
+production/native2187/weapons99 PASS; independent scope/timing review CLOSED.
+Full G0/exact deployment and actual phase timings/benefit remain pending.
+
+Actual6f5fc675 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Gameplay171336-a0f276 FAILS original65s startup: both native finishes
+and first native applies succeed (client1 tick17,66ms; client2 tick26,75ms), then
+repeated original-receipt stale waits prevent LIVE. Weapon size refusal and C2's
+previous staged guard failure do not recur; the latter's cause remains unresolved.
+No LIVE/HUD/model pixels. READY has no Lua timing rows, so it must not be inferred
+as a measured weapon duration. CPP weapon batch omitted the existing proven
+GameplayBoundaryScope; the next bounded change applies that immutable-config
+scope with all fresh guards intact and adds phase-edge batch timing (max8),
+without per-guard clocks, cached admission or receipt changes. Earlysecondary
+placementPASS, independent cleanup4absent/save20unchanged/nodumps/children and
+summary saved. Continue actual iteration; no release or completion claim.
+
 Next candidate corrects the weapon raw/padded accessor semantics: exact raw249,
 min8, padded256, independently qualified containing-property extent and all25
 fields. Vector24/8/24 and Color16/4/16 remain exact. Pinned SDKGenerator1688 and
