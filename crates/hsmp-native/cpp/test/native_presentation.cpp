@@ -1511,6 +1511,42 @@ void gameplay_current_checks(HsmpReflect& reflect){
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
+std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};
+void record_gameplay_quat(const char* stage,uint32_t,uint64_t,uint32_t attempt,uint32_t,uint32_t,uint32_t,const char* label){
+    bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
+    gameplay_quat_outside=gameplay_quat_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active;
+    check(std::strcmp(stage,"gameplay_quat")==0&&std::strlen(label)<320,"quaternion diagnostic has a distinct bounded copied label");
+    gameplay_quat_bits=gameplay_quat_bits||std::strstr(label,"8000000000000000")!=nullptr;gameplay_quat_records.push_back(attempt);
+}
+void gameplay_quat_checks(HsmpReflect& reflect){
+    alignas(16) std::array<uint8_t,0x200> root{};alignas(16) std::array<double,8> cache{};
+    const std::array<double,4> q{.1,.2,-0.,.9};const std::array<double,3> rotation{1,2,3};
+    std::copy(q.begin(),q.end(),cache.begin());std::copy(rotation.begin(),rotation.end(),cache.begin()+4);
+    const void* pointer=cache.data();std::memcpy(root.data()+0x1c0,&pointer,8);std::memcpy(root.data()+0x1d0,q.data(),32);std::memcpy(root.data()+0x140,rotation.data(),24);
+    GameplayQuatSnapshot before;check(gameplay_quat_copy(root.data(),before)&&before.cache==1&&std::memcmp(before.world.data(),q.data(),32)==0&&
+        std::memcmp(before.cached.data(),q.data(),32)==0&&std::memcmp(before.euler.data(),rotation.data(),24)==0&&before.relative==rotation,"pure quaternion diagnostic copies exact world/cache/Euler/relative native fields");
+    check(gameplay_quat_readable(cache.data(),64)&&!gameplay_quat_readable(nullptr,64)&&!gameplay_quat_readable(reinterpret_cast<void*>(UINTPTR_MAX-4),16),"cache readability requires the full allocation with null/overflow refusal");
+    pointer=nullptr;std::memcpy(root.data()+0x1c0,&pointer,8);GameplayQuatSnapshot missing;
+    check(gameplay_quat_copy(root.data(),missing)&&missing.reason==3&&missing.cache==0,"null native cache is unavailable and never allocated");
+    pointer=reinterpret_cast<void*>(1);std::memcpy(root.data()+0x1c0,&pointer,8);GameplayQuatSnapshot invalid;
+    check(gameplay_quat_copy(root.data(),invalid)&&invalid.reason==4&&invalid.cache==0,"invalid cache pointer is reported without dereferencing it");
+    void* denied=VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_NOACCESS);check(denied!=nullptr,"fixture allocates a real unreadable range");
+    pointer=denied;std::memcpy(root.data()+0x1c0,&pointer,8);GameplayQuatSnapshot protected_cache;
+    check(gameplay_quat_copy(root.data(),protected_cache)&&protected_cache.reason==4&&!protected_cache.cache,"committed no-access cache stays unavailable");VirtualFree(denied,0,MEM_RELEASE);
+    uintptr_t image{};uint32_t size{};check(!gameplay_quat_image(image,size),"unmatched fixture image refuses native cache interpretation without touching gameplay state");
+    pointer=cache.data();std::memcpy(root.data()+0x1c0,&pointer,8);cache[2]=std::nextafter(-0.,1.);GameplayQuatSnapshot after;
+    check(gameplay_quat_copy(root.data(),after)&&after.cached[2]!=before.cached[2],"each snapshot rereads native cache values rather than reusing a prior observation");
+    before.available=after.available=1;hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);
+    {GameplayQuatTrace disabled;check(!disabled.active&&gameplay_quat_attempts.load()==0,"disabled quaternion logger consumes no attempt or snapshot");}
+    gameplay_quat_records.clear();gameplay_quat_outside=true;gameplay_quat_bits=false;hsmp_presentation_set_create_log(record_gameplay_quat);
+    for(int i=0;i<12;++i){{GameplayQuatTrace trace;const std::lock_guard lock(gameplay_mutex);int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,keep(&old_world));
+        trace.before=before;trace.after=after;trace.requested=q;trace.complete=i!=2&&i<10?1u:0u;
+    }if(i==2)check(!gameplay_quat_failure.load(),"failure within first8 preserves the first later-failure reporter slot");
+    }
+    check(gameplay_quat_records.size()==99&&std::count(gameplay_quat_records.begin(),gameplay_quat_records.end(),9u)==11,"quaternion reporter is bounded to first8 plus first laterfailure, eleven copied lines each");
+    check(gameplay_quat_outside&&gameplay_quat_bits,"quaternion raw signed-zero bits emit after native scope/watch/mutex unwind");
+    hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);lifetime_reset(reflect);
+}
 }
 int main() {
     try {
@@ -1761,6 +1797,7 @@ int main() {
         create_trace_checks(reflect);
         gameplay_readback_checks();
         gameplay_current_checks(reflect);
+        gameplay_quat_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);

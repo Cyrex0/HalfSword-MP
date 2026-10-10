@@ -99,6 +99,7 @@ namespace
     void create_log(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,
                     uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name)
     {
+        if(std::strcmp(stage,"gameplay_quat")==0){logf("NATIVE_GAMEPLAY_QUAT attempt=%u complete=%u edge=%u %.*s diagnostic_only=true",marker,component,edge,319,function_name);return;}
         if(std::strcmp(stage,"gameplay_current")==0){logf("NATIVE_GAMEPLAY_CURRENT attempt=%u complete=%u stage=%u pe=%u total_us=%llu %.*s diagnostic_only=true",
             marker,edge,kind,component,static_cast<unsigned long long>(operation),159,function_name);return;}
         if(std::strcmp(stage,"present_apply_us")==0||std::strcmp(stage,"present_finish_us")==0){

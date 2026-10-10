@@ -14,6 +14,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   retaining prepared pawns under loading without new input or stale readiness.
 - Record bounded native gameplay timings after verification to identify live
   freshness failures without changing gear checks or receipt expiry.
+- Observe bounded native quaternion-cache snapshots around transform application
+  to diagnose exact readback differences without changing the setter.
 - Add negotiated lossless LZ4 blocks for native scene bootstrap and compact
   gameplay results, retaining raw packets when compression does not save space.
 - Add ordered native movement requests and staged Willie pawn construction from

@@ -15,6 +15,59 @@ struct GameplayCurrent {
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
 struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
 std::atomic<uint32_t> gameplay_current_attempts{};
+struct GameplayQuatSnapshot {uint32_t available{},reason{},cache{};uint64_t class_name{},slot{};std::array<double,4> world{},cached{};std::array<double,3> relative{},euler{};};
+bool gameplay_quat_readable(const void* pointer,size_t bytes){
+    uintptr_t at=reinterpret_cast<uintptr_t>(pointer);if(!at||bytes>UINTPTR_MAX-at)return false;const auto end=at+bytes;
+    while(at<end){MEMORY_BASIC_INFORMATION region{};if(VirtualQuery(reinterpret_cast<const void*>(at),&region,sizeof(region))!=sizeof(region)||region.State!=MEM_COMMIT||(region.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+        const auto protection=region.Protect&0xff;const bool read=protection==PAGE_READONLY||protection==PAGE_READWRITE||protection==PAGE_WRITECOPY||protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
+        const auto begin=reinterpret_cast<uintptr_t>(region.BaseAddress);if(!read||region.RegionSize>UINTPTR_MAX-begin||begin+region.RegionSize<=at)return false;at=begin+region.RegionSize;}
+    return true;
+}
+uint64_t gameplay_quat_hash(const uint8_t* bytes,size_t count){uint64_t hash=14695981039346656037ULL;for(size_t i=0;i<count;++i)hash=(hash^bytes[i])*1099511628211ULL;return hash;}
+bool gameplay_quat_image(uintptr_t& image,uint32_t& size){
+    image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));if(!gameplay_quat_readable(reinterpret_cast<const void*>(image),sizeof(IMAGE_DOS_HEADER)))return false;
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<=0||dos->e_lfanew>=65536||!gameplay_quat_readable(reinterpret_cast<const void*>(image+dos->e_lfanew),sizeof(IMAGE_NT_HEADERS64)))return false;
+    const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);size=pe->OptionalHeader.SizeOfImage;
+    if(pe->Signature!=IMAGE_NT_SIGNATURE||pe->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64||pe->OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC)return false;
+    for(const auto& [rva,count,hash]:{std::tuple<uint32_t,size_t,uint64_t>{0x22177d0,149,0x8d52cc5f8773eb8bULL},{0x3bf1e1a,245,0x662bb9275bcf9788ULL},{0x3bf54ed,7,0x614130ebfc0c0c2aULL}}){
+        if(rva>size||count>size-rva||!gameplay_quat_readable(reinterpret_cast<const void*>(image+rva),count)||gameplay_quat_hash(reinterpret_cast<const uint8_t*>(image+rva),count)!=hash)return false;}
+    return true;
+}
+bool gameplay_quat_slot(const void* root,uintptr_t image,uint32_t size,uint64_t& rva){
+    uint64_t table{},target{};std::memcpy(&table,root,8);if(!gameplay_quat_readable(reinterpret_cast<const void*>(table),0x540))return false;
+    std::memcpy(&target,reinterpret_cast<const uint8_t*>(table)+0x538,8);if(target<image||target-image>=size)return false;
+    MEMORY_BASIC_INFORMATION region{};if(VirtualQuery(reinterpret_cast<const void*>(target),&region,sizeof(region))!=sizeof(region)||region.State!=MEM_COMMIT||(region.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+    const auto protection=region.Protect&0xff;if(protection!=PAGE_EXECUTE&&protection!=PAGE_EXECUTE_READ&&protection!=PAGE_EXECUTE_READWRITE&&protection!=PAGE_EXECUTE_WRITECOPY)return false;rva=target-image;return true;
+}
+bool gameplay_quat_copy(const void* root,GameplayQuatSnapshot& out){
+    if(!gameplay_quat_readable(root,0x1f0)){out.reason=2;return false;}
+    std::memcpy(out.relative.data(),static_cast<const uint8_t*>(root)+0x140,24);std::memcpy(out.world.data(),static_cast<const uint8_t*>(root)+0x1d0,32);
+    const void* cache{};std::memcpy(&cache,static_cast<const uint8_t*>(root)+0x1c0,8);
+    if(!cache){out.reason=3;return true;}
+    if(reinterpret_cast<uintptr_t>(cache)%alignof(double)||!gameplay_quat_readable(cache,64)){out.reason=4;return true;}
+    std::memcpy(out.cached.data(),cache,32);std::memcpy(out.euler.data(),static_cast<const uint8_t*>(cache)+0x20,24);
+    const void* final{};std::memcpy(&final,static_cast<const uint8_t*>(root)+0x1c0,8);if(final!=cache){out.reason=5;return false;}out.cache=1;return true;
+}
+std::atomic<uint32_t> gameplay_quat_attempts{};std::atomic<bool> gameplay_quat_failure{};
+struct GameplayQuatTrace {
+    HsmpPresentationCreateLog logger{create_logger.load()};uint32_t attempt{},complete{};bool active{};
+    GameplayQuatSnapshot before,after;std::array<double,4> requested{};
+    HsmpNativePathNode original_root{};uint32_t root_flags{},root_class_flags{};bool root_bound{};
+    GameplayQuatTrace(){if(!logger)return;auto used=gameplay_quat_attempts.load();while(used<8){if(gameplay_quat_attempts.compare_exchange_weak(used,used+1)){attempt=used+1;break;}}active=attempt||!gameplay_quat_failure.load();}
+    void values(const char* label,const double* data,size_t count,uint32_t edge)const{
+        char text[320]{};size_t at{};for(size_t i=0;i<count;++i){uint64_t bits{};std::memcpy(&bits,data+i,8);const auto n=std::snprintf(text+at,sizeof(text)-at,"%s%zu=%.17g/%016llx ",label,i,data[i],static_cast<unsigned long long>(bits));if(n<0||static_cast<size_t>(n)>=sizeof(text)-at)break;at+=static_cast<size_t>(n);}
+        logger("gameplay_quat",edge,0,attempt,complete,0,0,text);
+    }
+    ~GameplayQuatTrace(){if(!active)return;if(!attempt&&!complete){if(!gameplay_quat_failure.exchange(true))attempt=9;}if(!attempt)return;
+        values("requested_q",requested.data(),4,0);
+        for(const auto& [edge,row]:{std::pair<uint32_t,const GameplayQuatSnapshot*>{1,&before},{2,&after}}){char label[192]{};
+            std::snprintf(label,sizeof(label),"available=%u reason=%u cache=%u class_fname=%016llx move_rva=%llx cached_equals_requested=%u evidence_only=true",row->available,row->reason,row->cache,static_cast<unsigned long long>(row->class_name),static_cast<unsigned long long>(row->slot),row->cache&&std::memcmp(row->cached.data(),requested.data(),32)==0?1u:0u);
+            logger("gameplay_quat",edge,0,attempt,complete,0,0,label);if(!row->available)continue;
+            values("world_q",row->world.data(),4,edge);values("relative",row->relative.data(),3,edge);
+            if(row->cache){values("cached_q",row->cached.data(),4,edge);values("cached_euler",row->euler.data(),3,edge);}
+        }
+    }
+};
 struct GameplayCurrentTrace {
     GameplayCurrentObservation observation;HsmpPresentationCreateLog logger{create_logger.load()};uint32_t attempt{};
     std::chrono::steady_clock::time_point started{};
@@ -267,6 +320,23 @@ void gameplay_local(const GameplayPawn& entry,HsmpViewResult* result){
     require(vt->class_of(get(entry.pawn))==get(entry.actor_class),"native gameplay original Willie class changed");
     gameplay_pure(entry);
 }
+void gameplay_quat_snapshot(GameplayQuatTrace& trace,const GameplayPawn& entry,Obj root,GameplayQuatSnapshot& out){
+    if(!trace.active)return;out.reason=1;
+    try{uintptr_t image{};uint32_t size{};if(!gameplay_quat_image(image,size))return;
+        gameplay_pure(entry);const auto node=trace.root_bound?trace.original_root:source_path_node(get(root));auto* object=source_path_get(node);const auto* cls=vt->resolve(node.class_weak);
+        const auto flags=*retirement_flags(object),class_flags=*retirement_flags(cls);const auto* outer=source_outer(object);
+        if(trace.root_bound&&(flags!=trace.root_flags||class_flags!=trace.root_class_flags)){out.reason=6;return;}
+        if(!trace.root_bound){trace.original_root=node;trace.root_flags=flags;trace.root_class_flags=class_flags;trace.root_bound=true;}
+        void* bound{};void* owner{};const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
+        std::memcpy(&bound,static_cast<const uint8_t*>(pawn)+0x1a0,8);std::memcpy(&owner,static_cast<const uint8_t*>(object)+0x90,8);
+        if(bound!=object||owner!=pawn||!outer||*outer!=pawn){out.reason=6;return;}
+        out.class_name=node.class_name;if(!gameplay_quat_slot(object,image,size,out.slot)){out.reason=7;return;}out.reason=0;
+        if(!gameplay_quat_copy(object,out))return;
+        gameplay_pure(entry);source_path_get(node);const auto* final_outer=source_outer(object);
+        std::memcpy(&bound,static_cast<const uint8_t*>(pawn)+0x1a0,8);std::memcpy(&owner,static_cast<const uint8_t*>(object)+0x90,8);
+        if(bound!=object||owner!=pawn||!final_outer||*final_outer!=pawn||*retirement_flags(object)!=flags||*retirement_flags(cls)!=class_flags){out.reason=6;return;}out.available=1;
+    }catch(const std::exception&){out.available=0;out.reason=6;}
+}
 int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
     const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);Obj created{};
@@ -463,6 +533,7 @@ void gameplay_view(GameplayPawn& entry,HsmpGameplayProof& proof,HsmpViewResult* 
     require(proof.hud.weak&&is(proof.hud,L"/Script/Engine.HUD")&&bool_property(proof.hud,L"bShowHUD"),"native gameplay native HUD unavailable");proof.flags|=HSMP_GAMEPLAY_HUD;
 }
 int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const HsmpViewGuard* guard,HsmpGameplayProof* proof,HsmpViewResult* result){
+    GameplayQuatTrace diagnostic;
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(state&&proof&&entry.stage==3,"native gameplay apply stage");*proof={};gameplay_finite(state->position);for(const auto value:state->orientation)require(std::isfinite(value),"native gameplay orientation nonfinite");gameplay_finite(state->velocity);gameplay_local(entry,result);
@@ -470,8 +541,10 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_transform_code();const auto root=object_property(entry.pawn,L"RootComponent");require(root.weak&&is(root,L"/Script/Engine.SceneComponent"),"native gameplay native transform root unavailable");
         require(property(entry.pawn,L"RootComponent",L"ObjectProperty",8).offset==0x1a0&&!object_property(root,L"AttachParent").weak,"native gameplay native transform root layout/attachment");
         Transform desired{};std::copy_n(state->position,3,desired.p);std::copy_n(state->orientation,4,desired.q);std::copy_n(entry.initial.scale,3,desired.scale);
+        if(diagnostic.active)std::copy_n(state->orientation,4,diagnostic.requested.data());
         Function transform(L"/Script/Engine.Actor:K2_SetActorTransform");
-        transform.put(L"NewTransform",L"StructProperty",engine(desired),L"Transform");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);transform.call(entry.pawn,result);
+        transform.put(L"NewTransform",L"StructProperty",engine(desired),L"Transform");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);
+        gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.before);transform.call(entry.pawn,result);gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.after);
         require(transform.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay root setter refused");
         const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
         require(same(returned(movement,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay movement owner changed");
@@ -489,7 +562,7 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
         gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
         auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement,root);
-        lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;return 1;
+        lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;diagnostic.complete=1;return 1;
     }catch(const std::exception& error){if(proof)*proof={};failure(result,error.what());return -1;}
 }
 int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){

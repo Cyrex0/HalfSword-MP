@@ -2,6 +2,37 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual43770ea2 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
+standard Gameplay071322-ff289d BOTH ready/LIVE, source active native input58/47.
+No earlier expiry shutdown; full gear samples79–175ms (variable, separate runs,
+not a normalized improvement claim). First cause now exact native quaternion
+readback: client1 tick68, nativeapply7.971ms, orientationaxis2 requested
+7.9557922584795449e-05 vsactual7.9557922584795477e-05,
+bits3f14db0ab3dad05b/3f14db0ab3dad05d (twoULPs), mask020. Other axes/root/
+velocity are not the reported mismatch. This is native setter/readback, not
+compression corruption; original raw input is retained. No tolerance loosening,
+input quantization or unproved raw overwrite. Next primary native setter branch
+analysis following source-ACKed movement, preserving exact source/body/view proof.
+Early secondaryPASS; no pixels on this run. CleanupPASS/four absent/save20/no
+dumps/no unobserved children. Complete proof/timing in native_operator_summary.
+Observation gate FAILS; no full gameplay/co-op/release parity claim.
+Primary chain preserves incoming Transform96 throughActor349FDF0→Scene3BF6F10
+→no-parent3BF5FE0→3BF4C60→actual root vslot538. Common3BF1970 cache miss can
+normalize/Quat→Euler and regenerateQuat; actual root target/branch unobserved.
+Bounded copied diagnostic frozen: before/after existing setter, original root
+class FName/weak/RF/owner/Outer, executable vslotRVA, worldq/RelativeRotation,
+cacheq/Euler. Native storage22177D0 allocates64, pointerRoot1C0, meaningful56;
+exact code149/245/7-byte windows pinned, whole64 readable+pointerstable.
+Unsupported/null/unreadable explicitly unavailable, no helper allocation/write
+or acceptance change. Reporter first8 plus first later failure (max9 attempts/
+99 copied lines) after watch/OperationScope/mutex unwind; no object reporter
+reads or executed-branch assertion. Strict CPP production/fixture1933 PASS;
+independent review CLOSED. Early failures inside first8 no longer consume the
+separate later-failure slot; targeted fixture exercises both and max99 lines.
+Compilation corrections: explicit void pointers for both locals; unsigned9u in
+existing logger-count fixture. FullG0/deploy and actual native branch evidence
+pending; no normalization/quantization/tolerance workaround justified.
+
 Actual ca155a21 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
 first Gameplay065719-bfde27 client travel begins~62s, startup deadlineFAIL with
 no gameplay. No visible UnrealWindow at early qualified placement; later pixels
